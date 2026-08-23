@@ -1,0 +1,8 @@
+{
+  "name": "event-crm",
+  "private": true,
+  "workspaces": [
+    "api",
+    "web"
+  ]
+}
