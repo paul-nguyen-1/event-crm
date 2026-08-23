@@ -6,9 +6,10 @@ import {
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -54,8 +55,14 @@ export class AuthController {
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
-  googleCallback(@Req() req: Request) {
-    // GoogleStrategy.validate() already returned tokens as req.user.
-    return req.user;
+  googleCallback(@Req() req: Request, @Res() res: Response) {
+    const { accessToken, refreshToken } = req.user as {
+      accessToken: string;
+      refreshToken: string;
+    };
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(
+      `${frontendUrl}/auth/google/callback#accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`,
+    );
   }
 }

@@ -14,6 +14,7 @@ interface AuthContextValue {
   isAuthenticated: boolean
   signup: (input: SignupInput) => Promise<void>
   login: (input: LoginInput) => Promise<void>
+  loginWithTokens: (accessToken: string, refreshToken: string) => void
   logout: () => Promise<void>
 }
 
@@ -38,6 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const tokens = await authApi.login(input)
         setTokens(tokens.accessToken, tokens.refreshToken)
         setUser(decodeAccessToken(tokens.accessToken))
+      },
+      loginWithTokens(accessToken, refreshToken) {
+        setTokens(accessToken, refreshToken)
+        setUser(decodeAccessToken(accessToken))
       },
       async logout() {
         try {
