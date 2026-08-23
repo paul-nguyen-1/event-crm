@@ -1,0 +1,100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Tier {
+  FREE
+  PAID
+}
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  passwordHash     String?
+  name             String?
+  tier             Tier     @default(FREE)
+  googleId         String?  @unique
+  refreshTokenHash String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  contacts         Contact[]
+
+  @@map("users")
+}
+
+model Contact {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  relationshipType String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  events           Event[]
+
+  @@index([userId])
+  @@map("contacts")
+}
+
+enum EventType {
+  BIRTHDAY
+  ANNIVERSARY
+  WEDDING
+  CUSTOM
+}
+
+model Event {
+  id             String    @id @default(uuid())
+  contactId      String
+  contact        Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  type           EventType
+  date           DateTime
+  recurrenceRule String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  reminders      Reminder[]
+
+  @@index([contactId])
+  @@map("events")
+}
+
+enum ReminderChannel {
+  EMAIL
+  IN_APP
+}
+
+model Reminder {
+  id           String          @id @default(uuid())
+  eventId      String
+  event        Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  leadTimeDays Int
+  channel      ReminderChannel
+  sentStatus   Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+
+  @@index([eventId])
+  @@map("reminders")
+}
+
+model DomainEvent {
+  id        String   @id @default(uuid())
+  type      String
+  payload   Json
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([published])
+  @@map("domain_events")
+}
