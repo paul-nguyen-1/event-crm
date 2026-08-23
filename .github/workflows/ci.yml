@@ -53,6 +53,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma Client
+        working-directory: api
+        run: npx prisma generate
+
       - name: Apply migrations
         working-directory: api
         run: npx prisma migrate deploy
