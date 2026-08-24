@@ -16,17 +16,21 @@ enum Tier {
 }
 
 model User {
-  id               String   @id @default(uuid())
-  email            String   @unique
-  passwordHash     String?
-  name             String?
-  tier             Tier     @default(FREE)
-  googleId         String?  @unique
-  refreshTokenHash String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  passwordHash        String?
+  name                String?
+  tier                Tier     @default(FREE)
+  googleId            String?  @unique
+  refreshTokenHash    String?
+  quietHoursStartHour Int?
+  quietHoursEndHour   Int?
+  timezone            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  contacts         Contact[]
+  contacts   Contact[]
+  linkClicks LinkClick[]
 
   @@map("users")
 }
@@ -38,10 +42,12 @@ model Contact {
   name             String
   relationshipType String?
   notes            String?
+  interests        String[] @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  events           Event[]
+  events     Event[]
+  linkClicks LinkClick[]
 
   @@index([userId])
   @@map("contacts")
@@ -64,7 +70,7 @@ model Event {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  reminders      Reminder[]
+  reminders Reminder[]
 
   @@index([contactId])
   @@map("events")
@@ -86,6 +92,42 @@ model Reminder {
 
   @@index([eventId])
   @@map("reminders")
+}
+
+enum Network {
+  AMAZON
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  name       String
+  tags       String[]
+  imageUrl   String?
+  basePrice  Decimal  @db.Decimal(10, 2)
+  network    Network
+  externalId String
+  createdAt  DateTime @default(now())
+
+  linkClicks LinkClick[]
+
+  @@unique([network, externalId])
+  @@map("products")
+}
+
+model LinkClick {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  network   Network
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([productId])
+  @@map("link_clicks")
 }
 
 model DomainEvent {
