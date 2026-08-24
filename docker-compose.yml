@@ -16,5 +16,10 @@ services:
       - "127.0.0.1:${RABBITMQ_PORT}:5672"
       - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT}:15672"
 
+  redis:
+    image: ${REDIS_IMAGE}
+    ports:
+      - "127.0.0.1:${REDIS_PORT}:6379"
+
 volumes:
   postgres_data:
