@@ -5,8 +5,10 @@ import { AppShell } from '@/components/app-shell'
 import { SignupPage } from '@/pages/signup-page'
 import { LoginPage } from '@/pages/login-page'
 import { GoogleCallbackPage } from '@/pages/google-callback-page'
+import { DashboardPage } from '@/pages/dashboard-page'
 import { ContactsListPage } from '@/pages/contacts-list-page'
 import { ContactDetailPage } from '@/pages/contact-detail-page'
+import { SettingsPage } from '@/pages/settings-page'
 
 function App() {
   const { isAuthenticated } = useAuth()
@@ -15,7 +17,7 @@ function App() {
     <Routes>
       <Route
         path="/"
-        element={<Navigate to={isAuthenticated ? '/contacts' : '/login'} replace />}
+        element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
       />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -23,8 +25,10 @@ function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/contacts" element={<ContactsListPage />} />
           <Route path="/contacts/:id" element={<ContactDetailPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>
 

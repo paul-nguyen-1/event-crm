@@ -17,7 +17,7 @@ export function GoogleCallbackPage() {
 
     if (accessToken && refreshToken) {
       loginWithTokens(accessToken, refreshToken)
-      navigate('/contacts', { replace: true })
+      navigate('/dashboard', { replace: true })
     } else {
       navigate('/login', { replace: true })
     }

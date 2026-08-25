@@ -25,7 +25,7 @@ export function LoginPage() {
     setServerError(null)
     try {
       await login(input)
-      navigate('/contacts')
+      navigate('/dashboard')
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : 'Something went wrong.')
     }

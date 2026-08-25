@@ -38,7 +38,7 @@ export function SignupPage() {
     setServerError(null)
     try {
       await signup(input)
-      navigate('/contacts')
+      navigate('/dashboard')
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : 'Something went wrong.')
     }
