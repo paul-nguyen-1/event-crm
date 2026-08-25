@@ -4,6 +4,43 @@ import { LinksService } from './links.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AffiliateLinkService } from './affiliate-link.service';
 
+describe('LinksService.findProduct', () => {
+  let service: LinksService;
+  let prisma: { product: { findUnique: jest.Mock } };
+
+  beforeEach(async () => {
+    prisma = { product: { findUnique: jest.fn() } };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LinksService,
+        { provide: PrismaService, useValue: prisma },
+        {
+          provide: AffiliateLinkService,
+          useValue: { resolveAffiliateLink: jest.fn() },
+        },
+      ],
+    }).compile();
+
+    service = module.get(LinksService);
+  });
+
+  it('throws NotFoundException for an unknown product', async () => {
+    prisma.product.findUnique.mockResolvedValue(null);
+
+    await expect(service.findProduct('missing')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('returns the product when found', async () => {
+    const product = { id: 'product-1', name: 'Candle set' };
+    prisma.product.findUnique.mockResolvedValue(product);
+
+    await expect(service.findProduct('product-1')).resolves.toEqual(product);
+  });
+});
+
 describe('LinksService.clickAndResolve', () => {
   let service: LinksService;
   let prisma: {

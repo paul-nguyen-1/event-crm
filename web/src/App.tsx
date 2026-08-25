@@ -9,6 +9,8 @@ import { DashboardPage } from '@/pages/dashboard-page'
 import { ContactsListPage } from '@/pages/contacts-list-page'
 import { ContactDetailPage } from '@/pages/contact-detail-page'
 import { SettingsPage } from '@/pages/settings-page'
+import { GiftHandoffPage } from '@/pages/gift-handoff-page'
+import { UnsubscribedPage } from '@/pages/unsubscribed-page'
 
 function App() {
   const { isAuthenticated } = useAuth()
@@ -22,8 +24,10 @@ function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+      <Route path="/unsubscribed" element={<UnsubscribedPage />} />
 
       <Route element={<ProtectedRoute />}>
+        <Route path="/gift/:productId" element={<GiftHandoffPage />} />
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/contacts" element={<ContactsListPage />} />

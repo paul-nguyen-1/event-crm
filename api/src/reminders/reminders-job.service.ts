@@ -4,6 +4,34 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { NotificationPreferencesService } from '../notifications/notification-preferences.service';
 import { EmailService } from '../notifications/email.service';
+import { SuggestionsService } from '../suggestions/suggestions.service';
+import { RemindersService } from './reminders.service';
+
+const SUGGESTIONS_IN_EMAIL = 3;
+
+/** "BIRTHDAY" -> "Birthday" */
+function titleCase(value: string): string {
+  return value.charAt(0) + value.slice(1).toLowerCase();
+}
+
+/**
+ * The personalized line under the heading. Only birthdays/anniversaries
+ * have a meaningful "turning N" framing; anything else gets a plain nudge.
+ */
+function buildDescription(
+  contactName: string,
+  occasionLabel: string,
+  eventType: string,
+  age: number | null,
+): string {
+  if (age != null && eventType === 'BIRTHDAY') {
+    return `${contactName} is turning ${age}. Here are a few things they might like.`;
+  }
+  if (age != null && eventType === 'ANNIVERSARY') {
+    return `${contactName} is celebrating ${age} years. Here are a few things they might like.`;
+  }
+  return `A reminder that ${contactName}'s ${occasionLabel.toLowerCase()} is coming up.`;
+}
 
 /**
  * Events recur yearly (birthdays, anniversaries) when recurrenceRule is
@@ -38,6 +66,8 @@ export class RemindersJobService {
     private readonly outbox: OutboxService,
     private readonly preferences: NotificationPreferencesService,
     private readonly email: EmailService,
+    private readonly suggestions: SuggestionsService,
+    private readonly reminders: RemindersService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -85,11 +115,50 @@ export class RemindersJobService {
         this.logger.log(`Reminder ${reminder.id} due, outbox row written`);
 
         if (reminder.channel === 'EMAIL') {
+          const occasionLabel = titleCase(event.type);
+          const age =
+            event.recurrenceRule === 'YEARLY'
+              ? occurrence.getUTCFullYear() - event.date.getUTCFullYear()
+              : null;
+          const suggestions = (
+            await this.suggestions.getForContact(event.contact.id, user.id)
+          )
+            .slice(0, SUGGESTIONS_IN_EMAIL)
+            .map((p) => ({
+              name: p.name,
+              basePrice: p.basePrice.toString(),
+              imageUrl: p.imageUrl,
+            }));
+          const unsubscribeToken = await this.reminders.signUnsubscribeToken(
+            reminder.id,
+          );
+          const frontendUrl =
+            process.env.FRONTEND_URL || 'http://localhost:5173';
+          const apiUrl = process.env.API_URL || 'http://localhost:3000/v1';
+
           const sent = await this.email.sendReminderEmail({
             to: user.email,
             subject: title,
             body,
             deepLink,
+            contactName: event.contact.name,
+            occasionLabel,
+            occasionDateLabel: occurrence.toLocaleDateString('en-US', {
+              day: 'numeric',
+              month: 'long',
+              timeZone: 'UTC',
+            }),
+            daysUntil: reminder.leadTimeDays,
+            description: buildDescription(
+              event.contact.name,
+              occasionLabel,
+              event.type,
+              age && age > 0 ? age : null,
+            ),
+            suggestions,
+            seeAllUrl: `${frontendUrl}${deepLink}`,
+            changeTimingUrl: `${frontendUrl}${deepLink}`,
+            unsubscribeUrl: `${apiUrl}/reminders/unsubscribe/${unsubscribeToken}`,
           });
           if (sent) {
             await this.prisma.reminder.update({

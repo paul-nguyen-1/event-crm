@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { RemindersService } from './reminders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReminderChannel } from '../../generated/prisma/enums';
@@ -13,8 +18,10 @@ describe('RemindersService', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
       delete: jest.Mock;
+      deleteMany: jest.Mock;
     };
   };
+  let jwt: jest.Mocked<JwtService>;
 
   const contact = { id: 'contact-1', userId: 'user-1' };
   const event = { id: 'event-1', contact };
@@ -28,6 +35,7 @@ describe('RemindersService', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         delete: jest.fn(),
+        deleteMany: jest.fn(),
       },
     };
 
@@ -35,10 +43,15 @@ describe('RemindersService', () => {
       providers: [
         RemindersService,
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: JwtService,
+          useValue: { signAsync: jest.fn(), verifyAsync: jest.fn() },
+        },
       ],
     }).compile();
 
     service = module.get(RemindersService);
+    jwt = module.get(JwtService);
   });
 
   describe('create', () => {
@@ -108,6 +121,54 @@ describe('RemindersService', () => {
       expect(prisma.reminder.delete).toHaveBeenCalledWith({
         where: { id: reminder.id },
       });
+    });
+  });
+
+  describe('unsubscribeByToken', () => {
+    it('rejects an invalid or expired token', async () => {
+      jwt.verifyAsync.mockRejectedValue(new Error('bad token'));
+
+      await expect(service.unsubscribeByToken('garbage')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.reminder.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a well-formed token signed for a different purpose', async () => {
+      jwt.verifyAsync.mockResolvedValue({
+        reminderId: reminder.id,
+        purpose: 'something-else',
+      });
+
+      await expect(service.unsubscribeByToken('token')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.reminder.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('deletes the reminder identified by a valid unsubscribe token', async () => {
+      jwt.verifyAsync.mockResolvedValue({
+        reminderId: reminder.id,
+        purpose: 'reminder-unsubscribe',
+      });
+
+      await service.unsubscribeByToken('token');
+
+      expect(prisma.reminder.deleteMany).toHaveBeenCalledWith({
+        where: { id: reminder.id },
+      });
+    });
+
+    it('is idempotent: a repeat click on an already-unsubscribed link does not throw', async () => {
+      jwt.verifyAsync.mockResolvedValue({
+        reminderId: reminder.id,
+        purpose: 'reminder-unsubscribe',
+      });
+      prisma.reminder.deleteMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.unsubscribeByToken('token'),
+      ).resolves.toBeUndefined();
     });
   });
 });

@@ -4,6 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { NotificationPreferencesService } from '../notifications/notification-preferences.service';
 import { EmailService } from '../notifications/email.service';
+import { SuggestionsService } from '../suggestions/suggestions.service';
+import { RemindersService } from './reminders.service';
+import type { ProductModel } from '../../generated/prisma/models';
 
 describe('nextOccurrence', () => {
   it('returns the literal date for a non-yearly (e.g. CUSTOM one-time) event', () => {
@@ -54,6 +57,7 @@ describe('RemindersJobService.checkDueReminders', () => {
   let outbox: jest.Mocked<OutboxService>;
   let preferences: jest.Mocked<NotificationPreferencesService>;
   let email: jest.Mocked<EmailService>;
+  let suggestions: jest.Mocked<SuggestionsService>;
 
   // Fixed to UTC midnight so occurrence/dueAt math (always UTC-midnight-based)
   // produces exact, predictable boundaries in these tests.
@@ -111,6 +115,16 @@ describe('RemindersJobService.checkDueReminders', () => {
           provide: EmailService,
           useValue: { sendReminderEmail: jest.fn().mockResolvedValue(true) },
         },
+        {
+          provide: SuggestionsService,
+          useValue: { getForContact: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: RemindersService,
+          useValue: {
+            signUnsubscribeToken: jest.fn().mockResolvedValue('signed-token'),
+          },
+        },
       ],
     }).compile();
 
@@ -118,6 +132,7 @@ describe('RemindersJobService.checkDueReminders', () => {
     outbox = module.get(OutboxService);
     preferences = module.get(NotificationPreferencesService);
     email = module.get(EmailService);
+    suggestions = module.get(SuggestionsService);
   });
 
   afterEach(() => {
@@ -170,6 +185,66 @@ describe('RemindersJobService.checkDueReminders', () => {
       where: { id: 'due' },
       data: { sentStatus: true },
     });
+  });
+
+  it('enriches the email with the contact-specific age, top-3 suggestions, and a signed unsubscribe link', async () => {
+    const originalFrontendUrl = process.env.FRONTEND_URL;
+    const originalApiUrl = process.env.API_URL;
+    process.env.FRONTEND_URL = 'https://app.example.com';
+    process.env.API_URL = 'https://api.example.com/v1';
+    function buildProduct(name: string, basePrice: string) {
+      return {
+        id: name,
+        name,
+        tags: [],
+        imageUrl: null,
+        basePrice: { toString: () => basePrice },
+        network: 'AMAZON',
+        externalId: name,
+        createdAt: new Date(),
+      } as unknown as ProductModel;
+    }
+    suggestions.getForContact.mockResolvedValue([
+      buildProduct('Candle set', '42'),
+      buildProduct('Mug pair', '44'),
+      buildProduct('Grinder', '49'),
+      buildProduct('Extra item', '10'),
+    ]);
+    const due = buildReminder({
+      id: 'due',
+      eventDate: '1991-08-25T00:00:00.000Z',
+      recurrenceRule: 'YEARLY',
+      leadTimeDays: 5,
+    });
+    prisma.reminder.findMany.mockResolvedValue([due]);
+
+    await service.checkDueReminders();
+
+    expect(suggestions.getForContact).toHaveBeenCalledWith(
+      'due-contact',
+      'user-1',
+    );
+    expect(email.sendReminderEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contactName: 'Sarah',
+        occasionLabel: 'Birthday',
+        daysUntil: 5,
+        description:
+          'Sarah is turning 35. Here are a few things they might like.',
+        suggestions: [
+          { name: 'Candle set', basePrice: '42', imageUrl: null },
+          { name: 'Mug pair', basePrice: '44', imageUrl: null },
+          { name: 'Grinder', basePrice: '49', imageUrl: null },
+        ],
+        seeAllUrl: 'https://app.example.com/contacts/due-contact',
+        changeTimingUrl: 'https://app.example.com/contacts/due-contact',
+        unsubscribeUrl:
+          'https://api.example.com/v1/reminders/unsubscribe/signed-token',
+      }),
+    );
+
+    process.env.FRONTEND_URL = originalFrontendUrl;
+    process.env.API_URL = originalApiUrl;
   });
 
   it("defers a due reminder inside the owning user's quiet hours: no outbox write, no email, sentStatus left false", async () => {

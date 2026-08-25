@@ -1,14 +1,51 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 
+const UNSUBSCRIBE_PURPOSE = 'reminder-unsubscribe';
+const UNSUBSCRIBE_TOKEN_TTL = '60d';
+
 @Injectable()
 export class RemindersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+  ) {}
+
+  /** Signs a one-click, no-login-required token for the reminder email's unsubscribe link. */
+  signUnsubscribeToken(reminderId: string): Promise<string> {
+    return this.jwt.signAsync(
+      { reminderId, purpose: UNSUBSCRIBE_PURPOSE },
+      {
+        secret: process.env.JWT_ACCESS_SECRET,
+        expiresIn: UNSUBSCRIBE_TOKEN_TTL,
+      },
+    );
+  }
+
+  /** Idempotent: a repeat click (or an email-scanner prefetch) on an already-unsubscribed link is a no-op, not an error. */
+  async unsubscribeByToken(token: string): Promise<void> {
+    let payload: { reminderId: string; purpose: string };
+    try {
+      payload = await this.jwt.verifyAsync(token, {
+        secret: process.env.JWT_ACCESS_SECRET,
+      });
+    } catch {
+      throw new BadRequestException('Invalid or expired link');
+    }
+    if (payload.purpose !== UNSUBSCRIBE_PURPOSE) {
+      throw new BadRequestException('Invalid link');
+    }
+    await this.prisma.reminder.deleteMany({
+      where: { id: payload.reminderId },
+    });
+  }
 
   findAllForEvent(eventId: string, userId: string) {
     return this.prisma.reminder.findMany({

@@ -9,6 +9,12 @@ export class LinksService {
     private readonly affiliateLink: AffiliateLinkService,
   ) {}
 
+  async findProduct(id: string) {
+    const product = await this.prisma.product.findUnique({ where: { id } });
+    if (!product) throw new NotFoundException('Product not found');
+    return product;
+  }
+
   async clickAndResolve(
     userId: string,
     productId: string,
