@@ -69,8 +69,11 @@ export function EventDialog({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<EventFormInput>({ resolver: zodResolver(eventFormSchema) })
+
+  const wantsReminder = watch('leadTimeDays') !== 'NONE'
 
   useEffect(() => {
     if (!open) return
@@ -80,6 +83,7 @@ export function EventDialog({
       date: event?.date ? event.date.slice(0, 10) : '',
       recurrenceRule: event?.recurrenceRule === 'YEARLY' ? 'YEARLY' : 'ONCE',
       leadTimeDays: existingReminder ? (String(existingReminder.leadTimeDays) as '7' | '3' | '14') : '7',
+      channel: existingReminder?.channel ?? 'EMAIL',
     })
     setServerError(null)
   }, [open, event, existingReminders, existingReminder, isEdit, reset])
@@ -99,13 +103,16 @@ export function EventDialog({
 
       const desiredLeadTime =
         input.leadTimeDays === 'NONE' ? null : Number(input.leadTimeDays)
-      if (desiredLeadTime !== (existingReminder?.leadTimeDays ?? null)) {
+      const reminderChanged =
+        desiredLeadTime !== (existingReminder?.leadTimeDays ?? null) ||
+        (desiredLeadTime !== null && input.channel !== existingReminder?.channel)
+      if (reminderChanged) {
         if (existingReminder) await remindersApi.deleteReminder(existingReminder.id)
         if (desiredLeadTime !== null) {
           await remindersApi.createReminder({
             eventId: savedEvent.id,
             leadTimeDays: desiredLeadTime,
-            channel: 'EMAIL',
+            channel: input.channel,
           })
         }
       }
@@ -211,10 +218,35 @@ export function EventDialog({
                 </Select>
               )}
             />
-            <p className="text-xs text-muted-foreground">
-              Reminders arrive by email. SMS is not available yet.
-            </p>
+            {!wantsReminder && (
+              <p className="text-xs text-muted-foreground">
+                SMS is not available yet.
+              </p>
+            )}
           </div>
+          {wantsReminder && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="e-channel">Notify me by</Label>
+              <Controller
+                control={control}
+                name="channel"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="e-channel" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EMAIL">Email</SelectItem>
+                      <SelectItem value="IN_APP">In-app</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <p className="text-xs text-muted-foreground">
+                In-app reminders show up as a live toast — keep this tab open to catch them.
+              </p>
+            </div>
+          )}
           <DialogFooter className="mt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

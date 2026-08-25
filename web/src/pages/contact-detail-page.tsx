@@ -7,6 +7,7 @@ import * as eventsApi from '@/api/events'
 import * as remindersApi from '@/api/reminders'
 import { ContactDialog } from '@/components/contact-dialog'
 import { EventDialog } from '@/components/event-dialog'
+import { SuggestionPanel } from '@/components/suggestion-panel'
 import { EVENT_TYPE_LABELS, type Event } from '@/schemas/event'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -165,6 +166,10 @@ export function ContactDetailPage() {
         <Plus className="size-4" />
         Add an occasion
       </Button>
+
+      <div className="mt-8">
+        <SuggestionPanel contactId={contact.id} />
+      </div>
 
       <ContactDialog
         open={contactDialogOpen}
