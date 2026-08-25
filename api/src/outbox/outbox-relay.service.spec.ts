@@ -73,7 +73,7 @@ describe('OutboxRelayService', () => {
       expect.objectContaining({
         eventId: 'evt-1',
         type: 'contact.created',
-        payload: { contactId: 'c1' },
+        contactId: 'c1',
         schemaVersion: 1,
       }),
     );
@@ -81,6 +81,37 @@ describe('OutboxRelayService', () => {
     expect(prisma.domainEvent.update).toHaveBeenCalledWith({
       where: { id: 'evt-1' },
       data: { published: true },
+    });
+  });
+
+  it('spreads the stored payload flat onto the envelope rather than nesting it under a `payload` key', async () => {
+    const event = {
+      id: 'evt-1',
+      type: 'reminder.due',
+      payload: { userId: 'u1', title: 'hi', body: 'body', deepLink: '/x' },
+      published: false,
+      createdAt: new Date('2026-08-22T00:00:00.000Z'),
+    };
+    prisma.domainEvent.findMany.mockResolvedValue([event]);
+
+    await service.relay();
+
+    const [, , buffer] = channel.publish.mock.calls[0] as [
+      string,
+      string,
+      Buffer,
+    ];
+    const envelope = JSON.parse(buffer.toString()) as Record<string, unknown>;
+    expect(envelope).not.toHaveProperty('payload');
+    expect(envelope).toEqual({
+      eventId: 'evt-1',
+      type: 'reminder.due',
+      userId: 'u1',
+      title: 'hi',
+      body: 'body',
+      deepLink: '/x',
+      occurredAt: '2026-08-22T00:00:00.000Z',
+      schemaVersion: 1,
     });
   });
 

@@ -143,6 +143,36 @@ describe('EventsService', () => {
     });
   });
 
+  describe('findUpcomingForUser', () => {
+    it("sorts events across all of the user's contacts by next-occurrence proximity", async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-08-22T00:00:00.000Z'));
+
+      const soon = {
+        id: 'e-soon',
+        date: new Date('2026-08-25T00:00:00.000Z'),
+        recurrenceRule: null,
+        contact: { id: 'c1' },
+      };
+      const later = {
+        id: 'e-later',
+        date: new Date('2026-12-25T00:00:00.000Z'),
+        recurrenceRule: 'YEARLY',
+        contact: { id: 'c2' },
+      };
+      prisma.event.findMany.mockResolvedValue([later, soon]);
+
+      const result = await service.findUpcomingForUser('user-1');
+
+      expect(prisma.event.findMany).toHaveBeenCalledWith({
+        where: { contact: { userId: 'user-1' } },
+        include: { contact: true },
+      });
+      expect(result.map((e) => e.id)).toEqual(['e-soon', 'e-later']);
+
+      jest.useRealTimers();
+    });
+  });
+
   describe('remove', () => {
     it('rejects deleting an event owned by another user', async () => {
       prisma.event.findUnique.mockResolvedValue(event);

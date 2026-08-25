@@ -41,7 +41,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       const envelope = {
         eventId: event.id,
         type: event.type,
-        payload: event.payload,
+        ...(event.payload as Record<string, unknown>),
         occurredAt: event.createdAt.toISOString(),
         schemaVersion: 1,
       };

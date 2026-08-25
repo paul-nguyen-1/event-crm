@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { nextOccurrence } from '../reminders/reminders-job.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 
@@ -15,6 +16,22 @@ export class EventsService {
     return this.prisma.event.findMany({
       where: { contactId, contact: { userId } },
     });
+  }
+
+  /** Every event across the user's contacts, sorted by next-occurrence proximity. */
+  async findUpcomingForUser(userId: string) {
+    const events = await this.prisma.event.findMany({
+      where: { contact: { userId } },
+      include: { contact: true },
+    });
+
+    const now = new Date();
+    return events
+      .map((event) => ({
+        ...event,
+        nextOccurrence: nextOccurrence(event.date, event.recurrenceRule, now),
+      }))
+      .sort((a, b) => a.nextOccurrence.getTime() - b.nextOccurrence.getTime());
   }
 
   async findOneForUser(id: string, userId: string) {

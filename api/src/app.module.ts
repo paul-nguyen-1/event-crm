@@ -7,6 +7,8 @@ import { UsersModule } from './users/users.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { EventsModule } from './events/events.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { LinksModule } from './links/links.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { RemindersModule } from './reminders/reminders.module';
     ContactsModule,
     EventsModule,
     RemindersModule,
+    NotificationsModule,
+    LinksModule,
   ],
 })
 export class AppModule {}

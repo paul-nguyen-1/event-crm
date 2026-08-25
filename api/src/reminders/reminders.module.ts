@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { OutboxModule } from '../outbox/outbox.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { RemindersService } from './reminders.service';
 import { RemindersController } from './reminders.controller';
 import { RemindersJobService } from './reminders-job.service';
 
 @Module({
-  imports: [OutboxModule],
+  imports: [OutboxModule, NotificationsModule],
   controllers: [RemindersController],
   providers: [RemindersService, RemindersJobService],
   exports: [RemindersService],

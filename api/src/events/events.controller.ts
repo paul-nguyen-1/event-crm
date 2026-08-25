@@ -34,6 +34,11 @@ export class EventsController {
     return this.eventsService.findAllForContact(contactId, user.userId);
   }
 
+  @Get('upcoming')
+  findUpcoming(@CurrentUser() user: AuthenticatedUser) {
+    return this.eventsService.findUpcomingForUser(user.userId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.eventsService.findOneForUser(id, user.userId);

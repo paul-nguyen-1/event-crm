@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RemindersJobService, nextOccurrence } from './reminders-job.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { NotificationPreferencesService } from '../notifications/notification-preferences.service';
+import { EmailService } from '../notifications/email.service';
 
 describe('nextOccurrence', () => {
   it('returns the literal date for a non-yearly (e.g. CUSTOM one-time) event', () => {
@@ -48,9 +50,10 @@ describe('RemindersJobService.checkDueReminders', () => {
   let service: RemindersJobService;
   let prisma: {
     reminder: { findMany: jest.Mock; update: jest.Mock };
-    $transaction: jest.Mock;
   };
   let outbox: jest.Mocked<OutboxService>;
+  let preferences: jest.Mocked<NotificationPreferencesService>;
+  let email: jest.Mocked<EmailService>;
 
   // Fixed to UTC midnight so occurrence/dueAt math (always UTC-midnight-based)
   // produces exact, predictable boundaries in these tests.
@@ -61,18 +64,29 @@ describe('RemindersJobService.checkDueReminders', () => {
     eventDate: string;
     recurrenceRule: string | null;
     leadTimeDays: number;
+    channel?: 'EMAIL' | 'IN_APP';
   }) {
     return {
       id: opts.id,
       leadTimeDays: opts.leadTimeDays,
-      channel: 'EMAIL',
+      channel: opts.channel ?? 'EMAIL',
       sentStatus: false,
       event: {
         id: `${opts.id}-event`,
         date: new Date(opts.eventDate),
         recurrenceRule: opts.recurrenceRule,
         type: 'BIRTHDAY',
-        contact: { userId: 'user-1', name: 'Sarah' },
+        contact: {
+          id: `${opts.id}-contact`,
+          name: 'Sarah',
+          user: {
+            id: 'user-1',
+            email: 'sarah-owner@example.com',
+            quietHoursStartHour: null,
+            quietHoursEndHour: null,
+            timezone: null,
+          },
+        },
       },
     };
   }
@@ -82,9 +96,6 @@ describe('RemindersJobService.checkDueReminders', () => {
 
     prisma = {
       reminder: { findMany: jest.fn(), update: jest.fn() },
-      $transaction: jest.fn((cb: (tx: unknown) => unknown) =>
-        cb({ reminder: { update: prisma.reminder.update } }),
-      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -92,11 +103,21 @@ describe('RemindersJobService.checkDueReminders', () => {
         RemindersJobService,
         { provide: PrismaService, useValue: prisma },
         { provide: OutboxService, useValue: { record: jest.fn() } },
+        {
+          provide: NotificationPreferencesService,
+          useValue: { isWithinQuietHours: jest.fn().mockReturnValue(false) },
+        },
+        {
+          provide: EmailService,
+          useValue: { sendReminderEmail: jest.fn().mockResolvedValue(true) },
+        },
       ],
     }).compile();
 
     service = module.get(RemindersJobService);
     outbox = module.get(OutboxService);
+    preferences = module.get(NotificationPreferencesService);
+    email = module.get(EmailService);
   });
 
   afterEach(() => {
@@ -114,11 +135,10 @@ describe('RemindersJobService.checkDueReminders', () => {
 
     await service.checkDueReminders();
 
-    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(outbox.record).not.toHaveBeenCalled();
   });
 
-  it('processes a reminder inside its lead-time window: marks sent and writes the outbox row', async () => {
+  it('writes the outbox row and sends email for a due reminder with no quiet-hours conflict', async () => {
     const due = buildReminder({
       id: 'due',
       eventDate: '2026-08-25T00:00:00.000Z',
@@ -129,22 +149,81 @@ describe('RemindersJobService.checkDueReminders', () => {
 
     await service.checkDueReminders();
 
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(outbox.record).toHaveBeenCalledWith(
+      prisma,
+      'reminder.due',
+      expect.objectContaining({
+        reminderId: 'due',
+        userId: 'user-1',
+        title: "Sarah's birthday is coming up",
+        channel: 'EMAIL',
+        deepLink: '/contacts/due-contact',
+      }),
+    );
+    expect(email.sendReminderEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'sarah-owner@example.com',
+        subject: "Sarah's birthday is coming up",
+      }),
+    );
     expect(prisma.reminder.update).toHaveBeenCalledWith({
       where: { id: 'due' },
       data: { sentStatus: true },
     });
+  });
+
+  it("defers a due reminder inside the owning user's quiet hours: no outbox write, no email, sentStatus left false", async () => {
+    preferences.isWithinQuietHours.mockReturnValue(true);
+    const due = buildReminder({
+      id: 'due',
+      eventDate: '2026-08-25T00:00:00.000Z',
+      recurrenceRule: 'YEARLY',
+      leadTimeDays: 5,
+    });
+    prisma.reminder.findMany.mockResolvedValue([due]);
+
+    await service.checkDueReminders();
+
+    expect(outbox.record).not.toHaveBeenCalled();
+    expect(email.sendReminderEmail).not.toHaveBeenCalled();
+    expect(prisma.reminder.update).not.toHaveBeenCalled();
+  });
+
+  it('does not mark sentStatus when Resend rejects the send, leaving it for retry next tick', async () => {
+    email.sendReminderEmail.mockResolvedValue(false);
+    const due = buildReminder({
+      id: 'due',
+      eventDate: '2026-08-25T00:00:00.000Z',
+      recurrenceRule: 'YEARLY',
+      leadTimeDays: 5,
+    });
+    prisma.reminder.findMany.mockResolvedValue([due]);
+
+    await service.checkDueReminders();
+
+    expect(outbox.record).toHaveBeenCalled();
+    expect(prisma.reminder.update).not.toHaveBeenCalled();
+  });
+
+  it('writes the outbox row for an IN_APP reminder but never calls email or sets sentStatus itself', async () => {
+    const due = buildReminder({
+      id: 'due',
+      eventDate: '2026-08-25T00:00:00.000Z',
+      recurrenceRule: 'YEARLY',
+      leadTimeDays: 5,
+      channel: 'IN_APP',
+    });
+    prisma.reminder.findMany.mockResolvedValue([due]);
+
+    await service.checkDueReminders();
+
     expect(outbox.record).toHaveBeenCalledWith(
-      expect.anything(),
+      prisma,
       'reminder.due',
-      expect.objectContaining({
-        reminderId: 'due',
-        eventId: 'due-event',
-        userId: 'user-1',
-        title: "Sarah's birthday is coming up",
-        channel: 'EMAIL',
-      }),
+      expect.objectContaining({ channel: 'IN_APP' }),
     );
+    expect(email.sendReminderEmail).not.toHaveBeenCalled();
+    expect(prisma.reminder.update).not.toHaveBeenCalled();
   });
 
   it('processes a reminder exactly at the due boundary (dueAt === now)', async () => {
@@ -158,7 +237,6 @@ describe('RemindersJobService.checkDueReminders', () => {
 
     await service.checkDueReminders();
 
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(outbox.record).toHaveBeenCalled();
   });
 
@@ -175,8 +253,34 @@ describe('RemindersJobService.checkDueReminders', () => {
 
     await service.checkDueReminders();
 
-    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(outbox.record).not.toHaveBeenCalled();
+  });
+
+  it('continues processing the rest of the batch when one reminder throws (e.g. Resend misconfigured)', async () => {
+    email.sendReminderEmail
+      .mockRejectedValueOnce(new Error('Missing API key'))
+      .mockResolvedValueOnce(true);
+    const failing = buildReminder({
+      id: 'failing',
+      eventDate: '2026-08-25T00:00:00.000Z',
+      recurrenceRule: 'YEARLY',
+      leadTimeDays: 5,
+    });
+    const succeeding = buildReminder({
+      id: 'succeeding',
+      eventDate: '2026-08-26T00:00:00.000Z',
+      recurrenceRule: 'YEARLY',
+      leadTimeDays: 5,
+    });
+    prisma.reminder.findMany.mockResolvedValue([failing, succeeding]);
+
+    await service.checkDueReminders();
+
+    expect(outbox.record).toHaveBeenCalledTimes(2);
+    expect(prisma.reminder.update).toHaveBeenCalledWith({
+      where: { id: 'succeeding' },
+      data: { sentStatus: true },
+    });
   });
 
   it('processes only the due reminders out of a mixed batch', async () => {
@@ -202,11 +306,12 @@ describe('RemindersJobService.checkDueReminders', () => {
 
     await service.checkDueReminders();
 
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.reminder.update).toHaveBeenCalledWith({
-      where: { id: 'due' },
-      data: { sentStatus: true },
-    });
+    expect(outbox.record).toHaveBeenCalledTimes(1);
+    expect(outbox.record).toHaveBeenCalledWith(
+      prisma,
+      'reminder.due',
+      expect.objectContaining({ reminderId: 'due' }),
+    );
   });
 
   it('only queries reminders that have not already been sent', async () => {

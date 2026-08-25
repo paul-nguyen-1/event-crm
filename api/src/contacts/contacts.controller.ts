@@ -11,6 +11,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthenticatedUser } from '../auth/authenticated-request';
+import { SuggestionsService } from '../suggestions/suggestions.service';
 import { ContactsService } from './contacts.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
@@ -18,7 +19,10 @@ import { UpdateContactDto } from './dto/update-contact.dto';
 @Controller('contacts')
 @UseGuards(JwtAuthGuard)
 export class ContactsController {
-  constructor(private readonly contactsService: ContactsService) {}
+  constructor(
+    private readonly contactsService: ContactsService,
+    private readonly suggestionsService: SuggestionsService,
+  ) {}
 
   @Post()
   create(
@@ -36,6 +40,14 @@ export class ContactsController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.contactsService.findOneForUser(id, user.userId);
+  }
+
+  @Get(':id/suggestions')
+  getSuggestions(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.suggestionsService.getForContact(id, user.userId);
   }
 
   @Patch(':id')
