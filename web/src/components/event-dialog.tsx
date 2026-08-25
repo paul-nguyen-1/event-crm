@@ -15,6 +15,7 @@ import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Select,
@@ -84,6 +85,7 @@ export function EventDialog({
       recurrenceRule: event?.recurrenceRule === 'YEARLY' ? 'YEARLY' : 'ONCE',
       leadTimeDays: existingReminder ? (String(existingReminder.leadTimeDays) as '7' | '3' | '14') : '7',
       channel: existingReminder?.channel ?? 'EMAIL',
+      note: event?.note ?? '',
     })
     setServerError(null)
   }, [open, event, existingReminders, existingReminder, isEdit, reset])
@@ -95,6 +97,9 @@ export function EventDialog({
         type: input.type,
         date: input.date,
         recurrenceRule: input.recurrenceRule === 'YEARLY' ? 'YEARLY' : undefined,
+        // Edit mode sends an explicit null to clear a note (an omitted key
+        // leaves the existing value untouched); create just omits it.
+        note: input.note || (isEdit ? null : undefined),
       }
 
       const savedEvent = isEdit
@@ -223,6 +228,17 @@ export function EventDialog({
                 SMS is not available yet.
               </p>
             )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="e-note">
+              Note <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="e-note"
+              rows={2}
+              placeholder="Turning 34 — she mentioned wanting a grinder"
+              {...register('note')}
+            />
           </div>
           {wantsReminder && (
             <div className="flex flex-col gap-1.5">

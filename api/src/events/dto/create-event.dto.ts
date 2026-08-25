@@ -14,4 +14,8 @@ export class CreateEventDto {
   @IsOptional()
   @IsString()
   recurrenceRule?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

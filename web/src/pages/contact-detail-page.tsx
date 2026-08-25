@@ -1,14 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import * as contactsApi from '@/api/contacts'
 import * as eventsApi from '@/api/events'
 import * as remindersApi from '@/api/reminders'
+import * as giftsApi from '@/api/gifts'
 import { ContactDialog } from '@/components/contact-dialog'
 import { EventDialog } from '@/components/event-dialog'
+import { GiftDialog } from '@/components/gift-dialog'
 import { SuggestionPanel } from '@/components/suggestion-panel'
 import { EVENT_TYPE_LABELS, type Event } from '@/schemas/event'
+import { daysUntil, daysUntilLabel } from '@/lib/dates'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -27,6 +30,7 @@ export function ContactDetailPage() {
   const [contactDialogOpen, setContactDialogOpen] = useState(false)
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | undefined>()
+  const [giftDialogOpen, setGiftDialogOpen] = useState(false)
 
   const { data: contact, isLoading: contactLoading } = useQuery({
     queryKey: ['contacts', id],
@@ -39,6 +43,22 @@ export function ContactDetailPage() {
     queryFn: () => eventsApi.listEventsForContact(id!),
     enabled: Boolean(id),
   })
+
+  const { data: upcoming } = useQuery({
+    queryKey: ['events', 'upcoming'],
+    queryFn: eventsApi.listUpcomingEvents,
+  })
+
+  const { data: gifts } = useQuery({
+    queryKey: ['gifts', id],
+    queryFn: () => giftsApi.listGifts(id!),
+    enabled: Boolean(id),
+  })
+
+  const nextUp = useMemo(
+    () => upcoming?.filter((e) => e.contact.id === id && daysUntil(e.nextOccurrence) >= 0)[0],
+    [upcoming, id],
+  )
 
   const deleteEventMutation = useMutation({
     mutationFn: eventsApi.deleteEvent,
@@ -64,111 +84,186 @@ export function ContactDetailPage() {
         ← People
       </Link>
 
-      <div className="my-3 mb-4 flex items-start gap-4">
-        <div>
-          <h2 className="mb-1">{contact.name}</h2>
-          {contact.relationshipType && (
-            <Badge variant="secondary">{contact.relationshipType}</Badge>
-          )}
-        </div>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={() => setContactDialogOpen(true)}>
-            Edit
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (confirm(`Remove ${contact.name}? This also removes their tracked dates.`)) {
-                deleteContactMutation.mutate(contact.id)
-              }
-            }}
-          >
-            Remove
-          </Button>
-        </div>
-      </div>
+      <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr]">
+        <div className="flex flex-col gap-6">
+          <div>
+            <div className="mb-1 flex items-start justify-between gap-2">
+              <h2 className="m-0">{contact.name}</h2>
+              <Button variant="ghost" size="sm" onClick={() => setContactDialogOpen(true)}>
+                Edit
+              </Button>
+            </div>
+            <p className="m-0 text-xs text-muted-foreground">
+              {contact.relationshipType || 'Contact'} · added{' '}
+              {new Date(contact.createdAt).toLocaleDateString(undefined, {
+                month: 'short',
+                year: 'numeric',
+              })}
+            </p>
+          </div>
 
-      {contact.notes && (
-        <p className="mb-6 max-w-2xl text-sm text-muted-foreground">{contact.notes}</p>
-      )}
-
-      <div className="mb-3 flex items-center gap-3">
-        <h3 className="m-0">Dates</h3>
-      </div>
-
-      {eventsLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-
-      {events && events.length > 0 && (
-        <Table className="mb-6">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Occasion</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Repeats</TableHead>
-              <TableHead>Reminder</TableHead>
-              <TableHead className="text-right" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {events.map((event) => (
-              <TableRow key={event.id}>
-                <TableCell>{EVENT_TYPE_LABELS[event.type]}</TableCell>
-                <TableCell className="font-mono">
-                  {new Date(event.date).toLocaleDateString(undefined, {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                    timeZone: 'UTC',
-                  })}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {event.recurrenceRule === 'YEARLY' ? 'Yearly' : 'Once'}
-                </TableCell>
-                <TableCell>
-                  <ReminderCell eventId={event.id} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
+          <div>
+            <div className="mb-2 text-[10px] tracking-[0.1em] text-muted-foreground uppercase">
+              Tracked dates
+            </div>
+            {eventsLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+            <div className="flex flex-col">
+              {events?.map((event) => (
+                <div
+                  key={event.id}
+                  className="group flex items-start gap-1 border-b border-border py-2 last:border-b-0"
+                >
+                  <button
+                    type="button"
                     onClick={() => {
                       setEditingEvent(event)
                       setEventDialogOpen(true)
                     }}
+                    className="flex flex-1 flex-col gap-0.5 text-left hover:opacity-70"
                   >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                    <div className="flex items-center justify-between text-sm">
+                      <span>{EVENT_TYPE_LABELS[event.type]}</span>
+                      <span className="font-mono text-primary">
+                        {new Date(event.date).toLocaleDateString(undefined, {
+                          day: 'numeric',
+                          month: 'short',
+                          timeZone: 'UTC',
+                        })}
+                      </span>
+                    </div>
+                    {event.note && (
+                      <span className="text-xs text-muted-foreground">{event.note}</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${EVENT_TYPE_LABELS[event.type]}`}
                     onClick={() => {
                       if (confirm('Remove this occasion?')) {
                         deleteEventMutation.mutate(event.id)
                       }
                     }}
+                    className="mt-0.5 shrink-0 cursor-pointer border-none bg-transparent p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
                   >
-                    Remove
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingEvent(undefined)
+                setEventDialogOpen(true)
+              }}
+              className="mt-2 cursor-pointer border-none bg-transparent p-0 text-sm text-primary underline-offset-4 hover:underline"
+            >
+              + Add a date
+            </button>
+          </div>
 
-      <Button
-        variant="outline"
-        onClick={() => {
-          setEditingEvent(undefined)
-          setEventDialogOpen(true)
-        }}
-      >
-        <Plus className="size-4" />
-        Add an occasion
-      </Button>
+          <div>
+            <div className="mb-2 text-[10px] tracking-[0.1em] text-muted-foreground uppercase">
+              Notes
+            </div>
+            <p className="m-0 text-sm text-muted-foreground">
+              {contact.notes || 'No notes yet.'}
+            </p>
+          </div>
+        </div>
 
-      <div className="mt-8">
-        <SuggestionPanel contactId={contact.id} />
+        <div className="flex flex-col gap-6">
+          {nextUp && (
+            <div className="rounded-md border border-border p-4">
+              <div className="mb-1 text-[10px] tracking-[0.1em] text-primary uppercase">
+                Next up · {daysUntilLabel(nextUp.nextOccurrence)}
+              </div>
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <h3 className="m-0">
+                  {EVENT_TYPE_LABELS[nextUp.type]},{' '}
+                  {new Date(nextUp.nextOccurrence).toLocaleDateString(undefined, {
+                    day: 'numeric',
+                    month: 'long',
+                    timeZone: 'UTC',
+                  })}
+                </h3>
+                <Button
+                  onClick={() =>
+                    setGiftDialogOpen(true)
+                  }
+                >
+                  Plan the gift
+                </Button>
+              </div>
+              <ReminderStatus eventId={nextUp.id} />
+            </div>
+          )}
+
+          <div>
+            <div className="mb-3 flex items-center gap-3">
+              <h3 className="m-0">Gift ledger</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => setGiftDialogOpen(true)}
+              >
+                <Plus className="size-4" />
+                Log a gift
+              </Button>
+            </div>
+            {gifts && gifts.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Occasion</TableHead>
+                    <TableHead>Gift</TableHead>
+                    <TableHead className="text-right">Cost</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gifts.map((gift) => (
+                    <TableRow key={gift.id}>
+                      <TableCell className="font-mono">
+                        {new Date(gift.giftDate).getUTCFullYear()}
+                      </TableCell>
+                      <TableCell>{gift.occasion}</TableCell>
+                      <TableCell>{gift.description}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {gift.costCents != null ? `$${(gift.costCents / 100).toFixed(0)}` : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-sm text-muted-foreground">No gifts logged yet.</p>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Kept so you don&apos;t repeat yourself. Only you can see it.
+            </p>
+          </div>
+
+          <SuggestionPanel
+            contactId={contact.id}
+            occasionLabel={nextUp ? EVENT_TYPE_LABELS[nextUp.type] : undefined}
+          />
+
+          <div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirm(`Remove ${contact.name}? This also removes their tracked dates.`)) {
+                  deleteContactMutation.mutate(contact.id)
+                }
+              }}
+            >
+              Remove {contact.name}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <ContactDialog
@@ -183,17 +278,26 @@ export function ContactDetailPage() {
         contactName={contact.name}
         event={editingEvent}
       />
+      <GiftDialog
+        open={giftDialogOpen}
+        onOpenChange={setGiftDialogOpen}
+        contactId={contact.id}
+        contactName={contact.name}
+        initial={nextUp ? { occasion: EVENT_TYPE_LABELS[nextUp.type] } : undefined}
+      />
     </div>
   )
 }
 
-function ReminderCell({ eventId }: { eventId: string }) {
+function ReminderStatus({ eventId }: { eventId: string }) {
   const { data: reminders } = useQuery({
     queryKey: ['reminders', eventId],
     queryFn: () => remindersApi.listRemindersForEvent(eventId),
   })
   const reminder = reminders?.[0]
 
-  if (!reminder) return <Badge variant="outline">Not set</Badge>
+  if (!reminder) return <Badge variant="outline">No reminder set</Badge>
+  if (reminder.sentStatus) return <Badge variant="secondary">Reminder sent</Badge>
   return <Badge variant="secondary">{reminder.leadTimeDays} days before</Badge>
 }
+

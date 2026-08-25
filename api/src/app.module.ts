@@ -9,6 +9,7 @@ import { EventsModule } from './events/events.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { LinksModule } from './links/links.module';
+import { GiftsModule } from './gifts/gifts.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { LinksModule } from './links/links.module';
     RemindersModule,
     NotificationsModule,
     LinksModule,
+    GiftsModule,
   ],
 })
 export class AppModule {}

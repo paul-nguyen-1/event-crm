@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+// Matches the "10 free" pitch in the signup page and Phase 4's planned
+// free-tier cap — not yet enforced server-side (that lands in Phase 4).
+export const FREE_CONTACT_LIMIT = 10
+
 export interface UserProfile {
   id: string
   email: string

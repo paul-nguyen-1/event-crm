@@ -14,13 +14,19 @@ export function createEvent(input: {
   type: EventType
   date: string
   recurrenceRule?: string
+  note?: string | null
 }) {
   return api.post<Event>('/events', input)
 }
 
 export function updateEvent(
   id: string,
-  input: Partial<{ type: EventType; date: string; recurrenceRule: string | null }>,
+  input: Partial<{
+    type: EventType
+    date: string
+    recurrenceRule: string | null
+    note: string | null
+  }>,
 ) {
   return api.patch<Event>(`/events/${id}`, input)
 }

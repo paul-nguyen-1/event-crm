@@ -22,6 +22,7 @@ export const eventFormSchema = z.object({
   recurrenceRule: z.enum(['YEARLY', 'ONCE']),
   leadTimeDays: z.enum(['7', '3', '14', 'NONE']),
   channel: z.enum(['EMAIL', 'IN_APP']),
+  note: z.string().optional(),
 })
 export type EventFormInput = z.infer<typeof eventFormSchema>
 
@@ -31,15 +32,17 @@ export interface Event {
   type: EventType
   date: string
   recurrenceRule: string | null
+  note: string | null
   createdAt: string
   updatedAt: string
   reminders?: Reminder[]
 }
 
 // Response shape of GET /v1/events/upcoming — an Event joined with its
-// owning contact plus the server-computed next-occurrence date.
+// owning contact and reminders, plus the server-computed next-occurrence date.
 export interface UpcomingEvent extends Event {
   contact: { id: string; name: string }
+  reminders: Reminder[]
   nextOccurrence: string
 }
 

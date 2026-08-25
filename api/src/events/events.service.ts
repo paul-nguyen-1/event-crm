@@ -22,7 +22,7 @@ export class EventsService {
   async findUpcomingForUser(userId: string) {
     const events = await this.prisma.event.findMany({
       where: { contact: { userId } },
-      include: { contact: true },
+      include: { contact: true, reminders: true },
     });
 
     const now = new Date();

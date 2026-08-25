@@ -165,7 +165,7 @@ describe('EventsService', () => {
 
       expect(prisma.event.findMany).toHaveBeenCalledWith({
         where: { contact: { userId: 'user-1' } },
-        include: { contact: true },
+        include: { contact: true, reminders: true },
       });
       expect(result.map((e) => e.id)).toEqual(['e-soon', 'e-later']);
 
