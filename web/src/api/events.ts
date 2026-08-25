@@ -1,8 +1,12 @@
 import { api } from '@/lib/api'
-import type { Event, EventType } from '@/schemas/event'
+import type { Event, EventType, UpcomingEvent } from '@/schemas/event'
 
 export function listEventsForContact(contactId: string) {
   return api.get<Event[]>(`/events?contactId=${contactId}`)
+}
+
+export function listUpcomingEvents() {
+  return api.get<UpcomingEvent[]>('/events/upcoming')
 }
 
 export function createEvent(input: {
