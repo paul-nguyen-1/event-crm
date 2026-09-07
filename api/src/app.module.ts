@@ -10,6 +10,7 @@ import { RemindersModule } from './reminders/reminders.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { LinksModule } from './links/links.module';
 import { GiftsModule } from './gifts/gifts.module';
+import { GiftIdeasModule } from './gift-ideas/gift-ideas.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { GiftsModule } from './gifts/gifts.module';
     NotificationsModule,
     LinksModule,
     GiftsModule,
+    GiftIdeasModule,
   ],
 })
 export class AppModule {}

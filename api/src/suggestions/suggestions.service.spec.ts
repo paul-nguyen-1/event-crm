@@ -8,6 +8,7 @@ describe('SuggestionsService.getForContact', () => {
   let prisma: {
     contact: { findUnique: jest.Mock };
     product: { findMany: jest.Mock };
+    savedGift: { findMany: jest.Mock };
   };
 
   function product(name: string, tags: string[]) {
@@ -18,6 +19,7 @@ describe('SuggestionsService.getForContact', () => {
     prisma = {
       contact: { findUnique: jest.fn() },
       product: { findMany: jest.fn() },
+      savedGift: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -101,5 +103,55 @@ describe('SuggestionsService.getForContact', () => {
     expect(Array.isArray(where.tags.hasSome)).toBe(true);
     expect(where.tags.hasSome.length).toBeGreaterThan(0);
     expect(result).toEqual([fallbackProduct]);
+  });
+
+  it("leads with the contact's manually-saved gift ideas ahead of tag-matched suggestions", async () => {
+    prisma.contact.findUnique.mockResolvedValue({
+      id: 'c1',
+      userId: 'user-1',
+      interests: ['cooking'],
+    });
+    const saved = product('Hand-Picked Grinder', ['cooking']);
+    prisma.savedGift.findMany.mockResolvedValue([{ product: saved }]);
+    const matched = product('Cooking Thing', ['cooking']);
+    prisma.product.findMany.mockResolvedValue([matched]);
+
+    const result = await service.getForContact('c1', 'user-1');
+
+    expect(prisma.savedGift.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { contactId: 'c1' } }),
+    );
+    expect(result.map((p) => p.id)).toEqual([saved.id, matched.id]);
+  });
+
+  it('does not duplicate a saved gift that also happens to tag-match', async () => {
+    prisma.contact.findUnique.mockResolvedValue({
+      id: 'c1',
+      userId: 'user-1',
+      interests: ['cooking'],
+    });
+    const savedAndMatched = product('Grinder', ['cooking']);
+    prisma.savedGift.findMany.mockResolvedValue([{ product: savedAndMatched }]);
+    prisma.product.findMany.mockResolvedValue([savedAndMatched]);
+
+    const result = await service.getForContact('c1', 'user-1');
+
+    expect(result.map((p) => p.id)).toEqual([savedAndMatched.id]);
+  });
+
+  it('includes saved gift ideas even when the contact has no interests set', async () => {
+    prisma.contact.findUnique.mockResolvedValue({
+      id: 'c1',
+      userId: 'user-1',
+      interests: [],
+    });
+    const saved = product('Hand-Picked Grinder', ['cooking']);
+    prisma.savedGift.findMany.mockResolvedValue([{ product: saved }]);
+    const fallbackProduct = product('Fallback Gadget', ['tech']);
+    prisma.product.findMany.mockResolvedValue([fallbackProduct]);
+
+    const result = await service.getForContact('c1', 'user-1');
+
+    expect(result.map((p) => p.id)).toEqual([saved.id, fallbackProduct.id]);
   });
 });

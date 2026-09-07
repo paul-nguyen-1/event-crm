@@ -49,6 +49,7 @@ model Contact {
   events     Event[]
   linkClicks LinkClick[]
   gifts      Gift[]
+  savedGifts SavedGift[]
 
   @@index([userId])
   @@map("contacts")
@@ -125,9 +126,30 @@ model Product {
   createdAt  DateTime @default(now())
 
   linkClicks LinkClick[]
+  savedGifts SavedGift[]
 
   @@unique([network, externalId])
   @@map("products")
+}
+
+/**
+ * A user pasting an Amazon link and picking it as a gift idea for a specific
+ * contact. Kept as a join to Product (deduped by ASIN) rather than a
+ * per-contact copy — the same physical item can be saved for many contacts
+ * without duplicating catalog rows or fighting Product's (network,
+ * externalId) uniqueness.
+ */
+model SavedGift {
+  id        String   @id @default(uuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([contactId, productId])
+  @@index([contactId])
+  @@map("saved_gifts")
 }
 
 model LinkClick {

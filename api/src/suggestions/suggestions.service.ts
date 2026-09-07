@@ -21,18 +21,30 @@ export class SuggestionsService {
     if (!contact) throw new NotFoundException('Contact not found');
     if (contact.userId !== userId) throw new ForbiddenException();
 
+    // Gifts the user explicitly picked (via an Amazon link) for this contact
+    // always lead — they're a stronger signal than a tag-overlap guess.
+    const saved = await this.prisma.savedGift.findMany({
+      where: { contactId },
+      include: { product: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const savedProducts = saved.map((s) => s.product);
+    const savedIds = new Set(savedProducts.map((p) => p.id));
+
     if (contact.interests.length === 0) {
-      return this.prisma.product.findMany({
+      const fallback = await this.prisma.product.findMany({
         where: { tags: { hasSome: FALLBACK_TAGS } },
         take: FALLBACK_LIMIT,
       });
+      return [...savedProducts, ...fallback.filter((p) => !savedIds.has(p.id))];
     }
 
     const candidates = await this.prisma.product.findMany({
       where: { tags: { hasSome: contact.interests } },
     });
 
-    return candidates
+    const ranked = candidates
+      .filter((p) => !savedIds.has(p.id))
       .map((product) => ({
         product,
         overlap: product.tags.filter((tag) => contact.interests.includes(tag))
@@ -43,5 +55,7 @@ export class SuggestionsService {
           b.overlap - a.overlap || a.product.name.localeCompare(b.product.name),
       )
       .map(({ product }) => product);
+
+    return [...savedProducts, ...ranked];
   }
 }
