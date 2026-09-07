@@ -3,8 +3,9 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 
+	"github.com/getsentry/sentry-go"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -18,7 +19,8 @@ func Run(ch *amqp.Channel, queueName string, handler *Handler) error {
 
 	for msg := range msgs {
 		if err := handler.HandleMessage(context.Background(), msg.Body); err != nil {
-			log.Printf("dropping unprocessable message: %v", err)
+			slog.Error("dropping unprocessable message", "error", err)
+			sentry.CaptureException(err)
 			_ = msg.Nack(false, false)
 			continue
 		}
@@ -36,10 +38,11 @@ type AMQPReceiptPublisher struct {
 	QueueName string
 }
 
-func (p *AMQPReceiptPublisher) PublishReceipt(reminderID string) error {
+func (p *AMQPReceiptPublisher) PublishReceipt(reminderID, eventID string) error {
 	body, err := json.Marshal(struct {
 		ReminderID string `json:"reminderId"`
-	}{ReminderID: reminderID})
+		EventID    string `json:"eventId"`
+	}{ReminderID: reminderID, EventID: eventID})
 	if err != nil {
 		return err
 	}

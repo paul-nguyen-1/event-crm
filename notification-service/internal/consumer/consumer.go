@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
+	"time"
+
+	"notification-service/internal/metrics"
 )
 
 // envelope carries only the fields this service needs for routing and
@@ -31,8 +34,10 @@ type Deliverer interface {
 }
 
 // ReceiptPublisher confirms a successful in-app delivery back to NestJS.
+// eventID is threaded through purely for correlation in NestJS's own logs —
+// it plays no role in this service's own delivery decision.
 type ReceiptPublisher interface {
-	PublishReceipt(reminderID string) error
+	PublishReceipt(reminderID, eventID string) error
 }
 
 type Handler struct {
@@ -51,6 +56,9 @@ type Handler struct {
 // this queue gets the same treatment, by design — a different *decision*
 // for a different event type belongs in NestJS, not here.
 func (h *Handler) HandleMessage(ctx context.Context, body []byte) error {
+	start := time.Now()
+	metrics.IncConsumed()
+
 	var env envelope
 	if err := json.Unmarshal(body, &env); err != nil {
 		return fmt.Errorf("malformed message: %w", err)
@@ -59,34 +67,40 @@ func (h *Handler) HandleMessage(ctx context.Context, body []byte) error {
 		return fmt.Errorf("message missing eventId or userId")
 	}
 
+	log := slog.With("eventId", env.EventID)
+
 	alreadySeen := h.Dedup.MarkIfNew(ctx, env.EventID)
 	if alreadySeen {
+		metrics.IncDedupHit()
 		// Redelivery of a message we already handled (e.g. this service
 		// restarted before acking). Skip re-delivery to avoid a duplicate
 		// push, but still (re-)publish the receipt: if the crash happened
 		// between the original delivery and its receipt, this is what
 		// closes that gap. Publishing it twice is harmless — NestJS's
 		// receipts consumer treats it as an idempotent status update.
-		h.publishReceiptIfReminder(env)
-		log.Printf("event %s already delivered, skipping duplicate push", env.EventID)
+		h.publishReceiptIfReminder(env, log)
+		log.Info("already delivered, skipping duplicate push")
+		metrics.RecordDeliveryLatency(time.Since(start))
 		return nil
 	}
+	metrics.IncDedupMiss()
 
 	delivered := h.Delivery.Deliver(env.UserID, body)
 	if delivered {
-		h.publishReceiptIfReminder(env)
+		h.publishReceiptIfReminder(env, log)
 	} else {
-		log.Printf("event %s: user %s has no open connection, nothing to deliver", env.EventID, env.UserID)
+		log.Info("no open connection, nothing to deliver", "userId", env.UserID)
 	}
+	metrics.RecordDeliveryLatency(time.Since(start))
 
 	return nil
 }
 
-func (h *Handler) publishReceiptIfReminder(env envelope) {
+func (h *Handler) publishReceiptIfReminder(env envelope, log *slog.Logger) {
 	if env.ReminderID == "" {
 		return
 	}
-	if err := h.Receipts.PublishReceipt(env.ReminderID); err != nil {
-		log.Printf("failed to publish delivery receipt for reminder %s: %v", env.ReminderID, err)
+	if err := h.Receipts.PublishReceipt(env.ReminderID, env.EventID); err != nil {
+		log.Error("failed to publish delivery receipt", "reminderId", env.ReminderID, "error", err)
 	}
 }

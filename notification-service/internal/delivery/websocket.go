@@ -2,7 +2,7 @@ package delivery
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"nhooyr.io/websocket"
@@ -40,7 +40,7 @@ func WebSocketHandler(registry *Registry, authenticate func(*http.Request) (user
 			OriginPatterns: []string{webOriginPattern},
 		})
 		if err != nil {
-			log.Printf("websocket accept error for user %s: %v", userID, err)
+			slog.Warn("websocket accept error", "userId", userID, "error", err)
 			return
 		}
 

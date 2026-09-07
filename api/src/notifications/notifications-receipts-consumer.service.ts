@@ -6,11 +6,13 @@ import {
 } from '@nestjs/common';
 import * as amqp from 'amqplib';
 import { PrismaService } from '../prisma/prisma.service';
+import { captureException } from '../observability/sentry';
 
 const RECEIPTS_QUEUE = 'notification-service.receipts';
 
 interface DeliveryReceipt {
   reminderId: string;
+  eventId?: string;
 }
 
 /**
@@ -53,12 +55,18 @@ export class NotificationsReceiptsConsumerService
         where: { id: receipt.reminderId },
         data: { sentStatus: true },
       });
-      this.logger.log(
-        `In-app delivery confirmed for reminder ${receipt.reminderId}`,
-      );
+      this.logger.log({
+        message: 'In-app delivery confirmed',
+        reminderId: receipt.reminderId,
+        eventId: receipt.eventId,
+      });
       this.channel!.ack(msg);
     } catch (err) {
-      this.logger.error(`Failed to process delivery receipt: ${err}`);
+      this.logger.error({
+        message: 'Failed to process delivery receipt',
+        error: String(err),
+      });
+      captureException(err);
       this.channel!.nack(msg, false, false);
     }
   }

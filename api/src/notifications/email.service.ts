@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
+import { captureException } from '../observability/sentry';
 
 export interface ReminderEmailSuggestion {
   name: string;
@@ -12,6 +13,8 @@ export interface ReminderEmail {
   subject: string;
   body: string;
   deepLink: string;
+  /** The originating outbox row's id — threaded through purely for log correlation. */
+  eventId?: string;
   // Everything below is optional so callers that only have the plain
   // title/body (or tests) keep working — the HTML upgrades opportunistically
   // when the richer context is available.
@@ -51,13 +54,22 @@ export class EmailService {
     });
 
     if (error) {
-      this.logger.error(
-        `Resend rejected reminder email to ${email.to}: ${error.message}`,
-      );
+      this.logger.error({
+        message: 'Resend rejected reminder email',
+        eventId: email.eventId,
+        to: email.to,
+        error: error.message,
+      });
+      captureException(new Error(`Resend rejected email: ${error.message}`));
       return false;
     }
 
-    this.logger.log(`Reminder email ${data.id} sent to ${email.to}`);
+    this.logger.log({
+      message: 'Reminder email sent',
+      eventId: email.eventId,
+      resendId: data.id,
+      to: email.to,
+    });
     return true;
   }
 }

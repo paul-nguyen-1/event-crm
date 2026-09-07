@@ -12,7 +12,7 @@ export class OutboxService {
     type: string,
     payload: Record<string, unknown>,
   ) {
-    await tx.domainEvent.create({
+    return tx.domainEvent.create({
       data: { type, payload: payload as Prisma.InputJsonValue },
     });
   }

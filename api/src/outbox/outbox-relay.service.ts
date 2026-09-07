@@ -60,7 +60,11 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         data: { published: true },
       });
 
-      this.logger.log(`Published domain event ${event.id} (${event.type})`);
+      this.logger.log({
+        message: 'Published domain event',
+        eventId: event.id,
+        type: event.type,
+      });
     }
   }
 }

@@ -37,15 +37,17 @@ func (f *fakeDeliverer) Deliver(userID string, payload []byte) bool {
 }
 
 type fakeReceipts struct {
-	published []string
-	err       error
+	published        []string
+	publishedEventID string
+	err              error
 }
 
-func (f *fakeReceipts) PublishReceipt(reminderID string) error {
+func (f *fakeReceipts) PublishReceipt(reminderID, eventID string) error {
 	if f.err != nil {
 		return f.err
 	}
 	f.published = append(f.published, reminderID)
+	f.publishedEventID = eventID
 	return nil
 }
 
@@ -73,6 +75,9 @@ func TestHandleMessage_NewEventDeliveredPublishesReceipt(t *testing.T) {
 	}
 	if len(receipts.published) != 1 || receipts.published[0] != "r1" {
 		t.Fatalf("expected a receipt published for r1, got %v", receipts.published)
+	}
+	if receipts.publishedEventID != "e1" {
+		t.Fatalf("expected the receipt to carry the originating eventId e1, got %q", receipts.publishedEventID)
 	}
 }
 

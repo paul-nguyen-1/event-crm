@@ -6,6 +6,7 @@ import { NotificationPreferencesService } from '../notifications/notification-pr
 import { EmailService } from '../notifications/email.service';
 import { SuggestionsService } from '../suggestions/suggestions.service';
 import { RemindersService } from './reminders.service';
+import { captureException } from '../observability/sentry';
 
 const SUGGESTIONS_IN_EMAIL = 3;
 
@@ -97,22 +98,32 @@ export class RemindersJobService {
       const title = `${event.contact.name}'s ${event.type.toLowerCase()} is coming up`;
       const body = `${event.contact.name}'s ${event.type.toLowerCase()} is on ${occurrence.toISOString().slice(0, 10)}.`;
       const deepLink = `/contacts/${event.contact.id}`;
+      let eventId: string | undefined;
 
       try {
         // Not wrapped in a transaction: sentStatus is no longer set here.
         // It's only ever flipped by a confirmed-delivery path downstream —
         // Resend's response for EMAIL (below), the receipts queue for IN_APP
         // (Phase 2.5) — so there's nothing else to commit atomically here.
-        await this.outbox.record(this.prisma, 'reminder.due', {
-          reminderId: reminder.id,
-          userId: user.id,
-          title,
-          body,
-          deepLink,
-          channel: reminder.channel,
-        });
+        const outboxRow = await this.outbox.record(
+          this.prisma,
+          'reminder.due',
+          {
+            reminderId: reminder.id,
+            userId: user.id,
+            title,
+            body,
+            deepLink,
+            channel: reminder.channel,
+          },
+        );
+        eventId = outboxRow.id;
 
-        this.logger.log(`Reminder ${reminder.id} due, outbox row written`);
+        this.logger.log({
+          message: 'Reminder due, outbox row written',
+          eventId,
+          reminderId: reminder.id,
+        });
 
         if (reminder.channel === 'EMAIL') {
           const occasionLabel = titleCase(event.type);
@@ -137,6 +148,7 @@ export class RemindersJobService {
           const apiUrl = process.env.API_URL || 'http://localhost:3000/v1';
 
           const sent = await this.email.sendReminderEmail({
+            eventId,
             to: user.email,
             subject: title,
             body,
@@ -171,7 +183,13 @@ export class RemindersJobService {
         // One reminder's dispatch failure (e.g. Resend misconfigured, broker
         // hiccup) must not stop the rest of this hour's batch from being
         // considered — sentStatus stays false either way, so it retries.
-        this.logger.error(`Failed to dispatch reminder ${reminder.id}: ${err}`);
+        this.logger.error({
+          message: 'Failed to dispatch reminder',
+          reminderId: reminder.id,
+          eventId,
+          error: String(err),
+        });
+        captureException(err);
       }
     }
   }

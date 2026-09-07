@@ -2,9 +2,10 @@ package dedup
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -34,7 +35,8 @@ func NewCache(client *redis.Client, ttl time.Duration) *Cache {
 func (c *Cache) MarkIfNew(ctx context.Context, eventID string) (alreadySeen bool) {
 	set, err := c.client.SetNX(ctx, keyPrefix+eventID, "1", c.ttl).Result()
 	if err != nil {
-		log.Printf("dedup cache error for event %s, delivering anyway: %v", eventID, err)
+		slog.Error("dedup cache error, delivering anyway", "eventId", eventID, "error", err)
+		sentry.CaptureException(err)
 		return false
 	}
 	return !set

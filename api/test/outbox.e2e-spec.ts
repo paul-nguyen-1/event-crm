@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { OutboxService } from '../src/outbox/outbox.service';
 import { ContactsService } from '../src/contacts/contacts.service';
+import { MetricsService } from '../src/observability/metrics.service';
 
 describe('Outbox atomicity (integration)', () => {
   let prisma: PrismaService;
@@ -12,7 +13,12 @@ describe('Outbox atomicity (integration)', () => {
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PrismaService, OutboxService, ContactsService],
+      providers: [
+        PrismaService,
+        OutboxService,
+        ContactsService,
+        MetricsService,
+      ],
     }).compile();
 
     prisma = module.get(PrismaService);

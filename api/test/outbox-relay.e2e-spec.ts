@@ -3,6 +3,7 @@ import * as amqp from 'amqplib';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { OutboxService } from '../src/outbox/outbox.service';
 import { OutboxRelayService } from '../src/outbox/outbox-relay.service';
+import { MetricsService } from '../src/observability/metrics.service';
 
 const EXCHANGE = 'domain.events';
 
@@ -16,7 +17,12 @@ describe('Outbox relay -> real RabbitMQ (integration)', () => {
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PrismaService, OutboxService, OutboxRelayService],
+      providers: [
+        PrismaService,
+        OutboxService,
+        OutboxRelayService,
+        MetricsService,
+      ],
     }).compile();
 
     prisma = module.get(PrismaService);

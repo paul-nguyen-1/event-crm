@@ -106,7 +106,10 @@ describe('RemindersJobService.checkDueReminders', () => {
       providers: [
         RemindersJobService,
         { provide: PrismaService, useValue: prisma },
-        { provide: OutboxService, useValue: { record: jest.fn() } },
+        {
+          provide: OutboxService,
+          useValue: { record: jest.fn().mockResolvedValue({ id: 'evt-1' }) },
+        },
         {
           provide: NotificationPreferencesService,
           useValue: { isWithinQuietHours: jest.fn().mockReturnValue(false) },

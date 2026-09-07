@@ -42,6 +42,19 @@ func (r *Registry) Unregister(userID string, conn Connection) {
 	}
 }
 
+// Count reports the total number of currently open connections across all
+// users — for periodic metrics logging, not delivery decisions.
+func (r *Registry) Count() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	total := 0
+	for _, conns := range r.connections {
+		total += len(conns)
+	}
+	return total
+}
+
 // Deliver sends payload to every open connection for userID. It reports
 // whether at least one connection received it — a false return means the
 // user simply has no open session right now, not an error.
