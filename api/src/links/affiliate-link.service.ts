@@ -19,10 +19,12 @@ export class AffiliateLinkService {
     switch (network) {
       case Network.AMAZON: {
         const trackingId = process.env.AMAZON_ASSOCIATES_TRACKING_ID;
-        if (!trackingId) {
-          throw new Error('AMAZON_ASSOCIATES_TRACKING_ID is not configured');
-        }
-        return `https://www.amazon.com/dp/${product.externalId}?tag=${trackingId}`;
+        const baseUrl = `https://www.amazon.com/dp/${product.externalId}`;
+        // No Associates account yet: link to the real product page untagged
+        // rather than fail the whole buy flow. The moment the tracking ID
+        // is configured, this same code path starts tagging every link —
+        // no other change needed.
+        return trackingId ? `${baseUrl}?tag=${trackingId}` : baseUrl;
       }
       default:
         throw new Error(

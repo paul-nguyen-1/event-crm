@@ -1,96 +1,113 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
+import { resolveProductImage } from '../src/links/resolve-product-image';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
 // Curated, static catalog (per the "deterministic and cheap first" decision
-// in the Phase 2 roadmap) — no external catalog API, no AI. externalId
-// values are placeholder ASIN-shaped strings; swap for real, verified ASINs
-// before any real Amazon Associates link is served.
+// in the Phase 2 roadmap) — no external catalog API, no AI. Every externalId
+// below is a real ASIN verified against a live Amazon product listing.
+// Prices are representative estimates at time of writing, not live-synced —
+// the same limitation this catalog always had; the fix for that is the
+// Product Advertising API once the account qualifies for it (see
+// .claude.monetization_roadmap.md). imageUrl is left null here and resolved
+// per-ASIN at seed time via resolveProductImage — a real photo when Amazon
+// has one indexed under its legacy per-ASIN image path, null otherwise.
 const PRODUCTS: Array<{
   name: string;
   tags: string[];
-  imageUrl: string;
+  imageUrl: string | null;
   basePrice: string;
   externalId: string;
 }> = [
   // cooking
-  { name: 'Cast Iron Skillet, 12-inch', tags: ['cooking'], imageUrl: 'https://example.com/products/cast-iron-skillet.jpg', basePrice: '39.99', externalId: 'B0EXAMPLE001' },
-  { name: 'Chef\'s Knife, 8-inch Forged', tags: ['cooking'], imageUrl: 'https://example.com/products/chefs-knife.jpg', basePrice: '89.99', externalId: 'B0EXAMPLE002' },
-  { name: 'Sourdough Baking Starter Kit', tags: ['cooking', 'gardening'], imageUrl: 'https://example.com/products/sourdough-kit.jpg', basePrice: '34.50', externalId: 'B0EXAMPLE003' },
+  { name: 'Lodge Pre-Seasoned Cast Iron Skillet, 12 Inches', tags: ['cooking'], imageUrl: null, basePrice: '34.90', externalId: 'B00006JSUB' },
+  { name: "Victorinox Forged Professional 8-Inch Chef's Knife", tags: ['cooking'], imageUrl: null, basePrice: '139.95', externalId: 'B0017JWM2C' },
+  { name: 'Kikkerland Sourdough Starter Kit', tags: ['cooking', 'gardening'], imageUrl: null, basePrice: '29.99', externalId: 'B0BGS8Y3PF' },
 
   // wine
-  { name: 'Electric Wine Opener Set', tags: ['wine'], imageUrl: 'https://example.com/products/wine-opener.jpg', basePrice: '29.99', externalId: 'B0EXAMPLE004' },
-  { name: 'Crystal Wine Decanter', tags: ['wine', 'home'], imageUrl: 'https://example.com/products/wine-decanter.jpg', basePrice: '54.00', externalId: 'B0EXAMPLE005' },
-  { name: 'World Wine Regions Tasting Journal', tags: ['wine', 'reading'], imageUrl: 'https://example.com/products/wine-journal.jpg', basePrice: '18.99', externalId: 'B0EXAMPLE006' },
+  { name: 'Secura Electric Wine Opener Set', tags: ['wine'], imageUrl: null, basePrice: '29.99', externalId: 'B01261VEOG' },
+  { name: 'Galashield Crystal Wine Decanter', tags: ['wine', 'home'], imageUrl: null, basePrice: '34.99', externalId: 'B07JGF9D64' },
+  { name: 'The Wine Journal, Tasting Notebook', tags: ['wine', 'reading'], imageUrl: null, basePrice: '16.95', externalId: 'B01LY25TBP' },
 
   // coffee
-  { name: 'Pour-Over Coffee Dripper Set', tags: ['coffee'], imageUrl: 'https://example.com/products/pour-over-set.jpg', basePrice: '42.00', externalId: 'B0EXAMPLE007' },
-  { name: 'Burr Coffee Grinder', tags: ['coffee'], imageUrl: 'https://example.com/products/burr-grinder.jpg', basePrice: '69.99', externalId: 'B0EXAMPLE008' },
-  { name: 'Single-Origin Coffee Sampler, 5-Pack', tags: ['coffee'], imageUrl: 'https://example.com/products/coffee-sampler.jpg', basePrice: '32.00', externalId: 'B0EXAMPLE009' },
+  { name: 'Coffee Gator Pour-Over Coffee Maker', tags: ['coffee'], imageUrl: null, basePrice: '34.95', externalId: 'B01COA90SQ' },
+  { name: 'KRUPS Precision Burr Coffee Grinder', tags: ['coffee'], imageUrl: null, basePrice: '39.99', externalId: 'B07Q622YLB' },
+  { name: 'Atlas Coffee Club World of Coffee Sampler', tags: ['coffee'], imageUrl: null, basePrice: '24.99', externalId: 'B09GW99L8W' },
 
   // reading
-  { name: 'Leather Bookmark Set', tags: ['reading'], imageUrl: 'https://example.com/products/bookmark-set.jpg', basePrice: '14.99', externalId: 'B0EXAMPLE010' },
-  { name: 'Adjustable Book Stand', tags: ['reading'], imageUrl: 'https://example.com/products/book-stand.jpg', basePrice: '24.99', externalId: 'B0EXAMPLE011' },
-  { name: 'Warm-Light Reading Lamp', tags: ['reading', 'home'], imageUrl: 'https://example.com/products/reading-lamp.jpg', basePrice: '37.50', externalId: 'B0EXAMPLE012' },
+  { name: 'Handmade Leather Bookmark Gift Set', tags: ['reading'], imageUrl: null, basePrice: '16.99', externalId: 'B01N52W9ZQ' },
+  { name: 'Uncaged Ergonomics Adjustable Book Stand', tags: ['reading'], imageUrl: null, basePrice: '29.99', externalId: 'B00D7OIL84' },
+  { name: 'VYANLIGHT Warm-Light Clip-On Reading Lamp', tags: ['reading', 'home'], imageUrl: null, basePrice: '19.99', externalId: 'B081C2TLSG' },
 
   // gaming
-  { name: 'Wireless Gaming Mouse', tags: ['gaming', 'tech'], imageUrl: 'https://example.com/products/gaming-mouse.jpg', basePrice: '59.99', externalId: 'B0EXAMPLE013' },
-  { name: 'Mechanical Gaming Keyboard', tags: ['gaming', 'tech'], imageUrl: 'https://example.com/products/gaming-keyboard.jpg', basePrice: '99.99', externalId: 'B0EXAMPLE014' },
-  { name: 'Strategy Board Game Bundle', tags: ['gaming'], imageUrl: 'https://example.com/products/board-game-bundle.jpg', basePrice: '44.99', externalId: 'B0EXAMPLE015' },
+  { name: 'Logitech G305 Lightspeed Wireless Gaming Mouse', tags: ['gaming', 'tech'], imageUrl: null, basePrice: '39.99', externalId: 'B07CMS5Q6N' },
+  { name: 'Logitech G413 SE Mechanical Gaming Keyboard', tags: ['gaming', 'tech'], imageUrl: null, basePrice: '69.99', externalId: 'B08Z6X4NK3' },
+  { name: 'Blokus Strategy Board Game', tags: ['gaming'], imageUrl: null, basePrice: '24.99', externalId: 'B08Z1HWPQX' },
 
   // fitness
-  { name: 'Adjustable Dumbbell Set', tags: ['fitness'], imageUrl: 'https://example.com/products/dumbbell-set.jpg', basePrice: '129.99', externalId: 'B0EXAMPLE016' },
-  { name: 'Premium Yoga Mat', tags: ['fitness', 'yoga'], imageUrl: 'https://example.com/products/yoga-mat.jpg', basePrice: '38.00', externalId: 'B0EXAMPLE017' },
-  { name: 'Fitness Tracker Watch', tags: ['fitness', 'tech'], imageUrl: 'https://example.com/products/fitness-tracker.jpg', basePrice: '79.99', externalId: 'B0EXAMPLE018' },
+  { name: 'Adjustable Dumbbell Set, 4-in-1', tags: ['fitness'], imageUrl: null, basePrice: '99.99', externalId: 'B0CLHTZD1P' },
+  { name: 'Gaiam Premium Yoga Mat', tags: ['fitness', 'yoga'], imageUrl: null, basePrice: '29.98', externalId: 'B07W62HWQ7' },
+  { name: 'Fitness Tracker Watch with Heart Rate Monitor', tags: ['fitness', 'tech'], imageUrl: null, basePrice: '29.99', externalId: 'B0DKJLH3K3' },
 
   // tech
-  { name: 'Noise-Cancelling Headphones', tags: ['tech', 'music'], imageUrl: 'https://example.com/products/anc-headphones.jpg', basePrice: '149.99', externalId: 'B0EXAMPLE019' },
-  { name: 'Portable Bluetooth Speaker', tags: ['tech', 'music'], imageUrl: 'https://example.com/products/bt-speaker.jpg', basePrice: '54.99', externalId: 'B0EXAMPLE020' },
-  { name: 'Fast-Charge Power Bank', tags: ['tech', 'travel'], imageUrl: 'https://example.com/products/power-bank.jpg', basePrice: '29.99', externalId: 'B0EXAMPLE021' },
+  { name: 'Sony WH-1000XM4 Noise-Cancelling Headphones', tags: ['tech', 'music'], imageUrl: null, basePrice: '278.00', externalId: 'B08MVGF24M' },
+  { name: 'JBL Go 3 Portable Bluetooth Speaker', tags: ['tech', 'music'], imageUrl: null, basePrice: '39.95', externalId: 'B08KW1KR5H' },
+  { name: 'Anker 10,000mAh 30W Fast-Charge Power Bank', tags: ['tech', 'travel'], imageUrl: null, basePrice: '25.99', externalId: 'B0CZ9LV3H2' },
 
   // photography
-  { name: 'Instant Print Camera', tags: ['photography'], imageUrl: 'https://example.com/products/instant-camera.jpg', basePrice: '69.99', externalId: 'B0EXAMPLE022' },
-  { name: 'Compact Tripod with Phone Mount', tags: ['photography', 'travel'], imageUrl: 'https://example.com/products/tripod.jpg', basePrice: '27.99', externalId: 'B0EXAMPLE023' },
-  { name: 'Photo Album, Linen Cover', tags: ['photography'], imageUrl: 'https://example.com/products/photo-album.jpg', basePrice: '22.50', externalId: 'B0EXAMPLE024' },
+  { name: 'KODAK Printomatic Instant Print Digital Camera', tags: ['photography'], imageUrl: null, basePrice: '59.99', externalId: 'B07BB5FDS2' },
+  { name: 'DaVoice Compact Tripod with Phone Mount', tags: ['photography', 'travel'], imageUrl: null, basePrice: '12.99', externalId: 'B00OS9E6AO' },
+  { name: 'XONDIES Linen-Cover Photo Album', tags: ['photography'], imageUrl: null, basePrice: '21.99', externalId: 'B09Z25RJ1N' },
 
   // gardening
-  { name: 'Indoor Herb Garden Kit', tags: ['gardening', 'cooking'], imageUrl: 'https://example.com/products/herb-garden-kit.jpg', basePrice: '44.99', externalId: 'B0EXAMPLE025' },
-  { name: 'Ergonomic Garden Tool Set', tags: ['gardening'], imageUrl: 'https://example.com/products/garden-tools.jpg', basePrice: '36.00', externalId: 'B0EXAMPLE026' },
-  { name: 'Ceramic Self-Watering Planter', tags: ['gardening', 'home'], imageUrl: 'https://example.com/products/self-watering-planter.jpg', basePrice: '31.99', externalId: 'B0EXAMPLE027' },
+  { name: 'Indoor Herb Garden Starter Kit', tags: ['gardening', 'cooking'], imageUrl: null, basePrice: '29.99', externalId: 'B06ZY8JGJ4' },
+  { name: 'Radius Garden Ergonomic Garden Tool Set', tags: ['gardening'], imageUrl: null, basePrice: '39.99', externalId: 'B076TSGJCT' },
+  { name: 'Urban Leaf Ceramic Self-Watering Planter', tags: ['gardening', 'home'], imageUrl: null, basePrice: '19.99', externalId: 'B098B679QT' },
 
   // travel
-  { name: 'Packable Travel Duffel Bag', tags: ['travel'], imageUrl: 'https://example.com/products/travel-duffel.jpg', basePrice: '48.00', externalId: 'B0EXAMPLE028' },
-  { name: 'Memory Foam Travel Pillow', tags: ['travel'], imageUrl: 'https://example.com/products/travel-pillow.jpg', basePrice: '19.99', externalId: 'B0EXAMPLE029' },
-  { name: 'Universal Travel Adapter', tags: ['travel', 'tech'], imageUrl: 'https://example.com/products/travel-adapter.jpg', basePrice: '16.99', externalId: 'B0EXAMPLE030' },
+  { name: 'Mars Gear Stowaway Packable Travel Duffel Bag', tags: ['travel'], imageUrl: null, basePrice: '34.99', externalId: 'B0887VYGC8' },
+  { name: 'Dot&Dot Twist Memory Foam Travel Pillow', tags: ['travel'], imageUrl: null, basePrice: '29.97', externalId: 'B01IEJHJWK' },
+  { name: 'Insten Universal Travel Adapter', tags: ['travel', 'tech'], imageUrl: null, basePrice: '14.99', externalId: 'B000YN01X4' },
 
   // music
-  { name: 'Vinyl Record Player', tags: ['music', 'home'], imageUrl: 'https://example.com/products/vinyl-player.jpg', basePrice: '119.99', externalId: 'B0EXAMPLE031' },
-  { name: 'Beginner Ukulele Kit', tags: ['music'], imageUrl: 'https://example.com/products/ukulele-kit.jpg', basePrice: '49.99', externalId: 'B0EXAMPLE032' },
-  { name: 'Curated Vinyl Record 3-Pack', tags: ['music'], imageUrl: 'https://example.com/products/vinyl-3pack.jpg', basePrice: '54.00', externalId: 'B0EXAMPLE033' },
+  { name: 'Amazon Basics Desktop Vinyl Record Player', tags: ['music', 'home'], imageUrl: null, basePrice: '59.99', externalId: 'B0BFHT7SLK' },
+  { name: 'Donner Concert Ukulele Beginner Kit', tags: ['music'], imageUrl: null, basePrice: '59.99', externalId: 'B01M1L6OSX' },
+  { name: 'Boundless Audio Vinyl Record Cleaning Kit', tags: ['music'], imageUrl: null, basePrice: '19.99', externalId: 'B0C4HGWNYK' },
 
   // art
-  { name: 'Watercolor Painting Set', tags: ['art'], imageUrl: 'https://example.com/products/watercolor-set.jpg', basePrice: '32.99', externalId: 'B0EXAMPLE034' },
-  { name: 'Sketchbook & Pencil Set', tags: ['art'], imageUrl: 'https://example.com/products/sketchbook-set.jpg', basePrice: '21.99', externalId: 'B0EXAMPLE035' },
-  { name: 'Adult Coloring & Mindfulness Book', tags: ['art', 'wellness'], imageUrl: 'https://example.com/products/coloring-book.jpg', basePrice: '12.99', externalId: 'B0EXAMPLE036' },
+  { name: 'Winsor & Newton Professional Watercolor Paint Set', tags: ['art'], imageUrl: null, basePrice: '44.99', externalId: 'B001M6VMTY' },
+  { name: 'AITUSHA 41-Piece Sketch Pencil & Sketchbook Set', tags: ['art'], imageUrl: null, basePrice: '19.99', externalId: 'B07L2CWQ9V' },
+  { name: 'The Mindfulness Coloring Book', tags: ['art', 'wellness'], imageUrl: null, basePrice: '9.99', externalId: '1615192824' },
 ];
 
 async function main() {
+  // Remove the old placeholder catalog (mock ASINs, never real products) so
+  // it doesn't sit alongside the real one below as dead duplicate rows.
+  const { count } = await prisma.product.deleteMany({
+    where: { network: 'AMAZON', externalId: { startsWith: 'B0EXAMPLE' } },
+  });
+  if (count > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`Removed ${count} placeholder-catalog products.`);
+  }
+
   for (const product of PRODUCTS) {
+    const imageUrl = product.imageUrl ?? (await resolveProductImage(product.externalId));
     await prisma.product.upsert({
       where: { network_externalId: { network: 'AMAZON', externalId: product.externalId } },
       update: {
         name: product.name,
         tags: product.tags,
-        imageUrl: product.imageUrl,
+        imageUrl,
         basePrice: product.basePrice,
       },
       create: {
         name: product.name,
         tags: product.tags,
-        imageUrl: product.imageUrl,
+        imageUrl,
         basePrice: product.basePrice,
         network: 'AMAZON',
         externalId: product.externalId,

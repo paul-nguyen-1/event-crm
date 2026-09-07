@@ -26,15 +26,15 @@ describe('AffiliateLinkService.resolveAffiliateLink', () => {
     expect(url).toBe('https://www.amazon.com/dp/B0EXAMPLE001?tag=mytag-20');
   });
 
-  it('throws rather than producing an untagged link when the tracking ID is not configured', () => {
+  it('falls back to the plain product page when no tracking ID is configured yet (pre-Associates-account)', () => {
     delete process.env.AMAZON_ASSOCIATES_TRACKING_ID;
 
-    expect(() =>
-      service.resolveAffiliateLink(
-        { externalId: 'B0EXAMPLE001' },
-        Network.AMAZON,
-      ),
-    ).toThrow('AMAZON_ASSOCIATES_TRACKING_ID is not configured');
+    const url = service.resolveAffiliateLink(
+      { externalId: 'B0EXAMPLE001' },
+      Network.AMAZON,
+    );
+
+    expect(url).toBe('https://www.amazon.com/dp/B0EXAMPLE001');
   });
 
   it('throws for a network that is not implemented yet, rather than silently returning an untagged link', () => {
