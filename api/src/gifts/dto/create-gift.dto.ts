@@ -1,11 +1,13 @@
 import {
   IsDateString,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
   Min,
   MinLength,
 } from 'class-validator';
+import { GiftStatus } from '../../../generated/prisma/enums';
 
 export class CreateGiftDto {
   @IsString()
@@ -26,4 +28,8 @@ export class CreateGiftDto {
   @IsInt()
   @Min(0)
   costCents?: number;
+
+  @IsOptional()
+  @IsEnum(GiftStatus)
+  status?: GiftStatus;
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router'
+import { ImageOff } from 'lucide-react'
 import * as productsApi from '@/api/products'
 import * as contactsApi from '@/api/contacts'
 import * as linksApi from '@/api/links'
@@ -14,7 +15,7 @@ export function GiftHandoffPage() {
   const [searchParams] = useSearchParams()
   const contactId = searchParams.get('contactId') ?? undefined
   const occasion = searchParams.get('occasion') || 'Gift'
-  const [logged, setLogged] = useState(false)
+  const [savedGiftId, setSavedGiftId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const { data: product, isLoading } = useQuery({
@@ -37,8 +38,18 @@ export function GiftHandoffPage() {
         giftDate: new Date().toISOString().slice(0, 10),
         description: product!.name,
         costCents: Math.round(Number(product!.basePrice) * 100),
+        // Checking this box just means "this is the plan" — not proof the
+        // Amazon order was actually completed — so it starts pending. The
+        // ledger's status can be flipped to Bought once it actually is.
+        status: 'PENDING',
       }),
-    onSuccess: () => setLogged(true),
+    onSuccess: (gift) => setSavedGiftId(gift.id),
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Something went wrong.'),
+  })
+
+  const unmarkGiftMutation = useMutation({
+    mutationFn: () => giftsApi.deleteGift(savedGiftId!),
+    onSuccess: () => setSavedGiftId(null),
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Something went wrong.'),
   })
 
@@ -52,6 +63,7 @@ export function GiftHandoffPage() {
         throw err
       }
     },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Something went wrong.'),
   })
 
   function handleContinue() {
@@ -88,8 +100,9 @@ export function GiftHandoffPage() {
             className="mx-auto mb-5 aspect-square w-40 rounded-md object-cover"
           />
         ) : (
-          <div className="mx-auto mb-5 grid aspect-square w-40 place-items-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
-            product shot
+          <div className="mx-auto mb-5 flex aspect-square w-40 flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-muted-foreground">
+            <ImageOff className="size-6" />
+            <span className="text-xs">No image available</span>
           </div>
         )}
 
@@ -112,9 +125,11 @@ export function GiftHandoffPage() {
         {contact && (
           <label className="mt-5 flex items-center justify-center gap-2 text-sm">
             <Checkbox
-              checked={logged}
-              disabled={logged || logGiftMutation.isPending}
-              onCheckedChange={(checked) => checked && logGiftMutation.mutate()}
+              checked={savedGiftId !== null}
+              disabled={logGiftMutation.isPending || unmarkGiftMutation.isPending}
+              onCheckedChange={(checked) =>
+                checked ? logGiftMutation.mutate() : unmarkGiftMutation.mutate()
+              }
             />
             Mark this as the gift I gave {contact.name}
           </label>

@@ -11,6 +11,7 @@ describe('GiftsService', () => {
       findMany: jest.Mock;
       findUnique: jest.Mock;
       create: jest.Mock;
+      update: jest.Mock;
       delete: jest.Mock;
     };
   };
@@ -25,6 +26,7 @@ describe('GiftsService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
         delete: jest.fn(),
       },
     };
@@ -78,6 +80,41 @@ describe('GiftsService', () => {
 
       expect(prisma.gift.create).toHaveBeenCalled();
       expect(result).toEqual(gift);
+    });
+  });
+
+  describe('update', () => {
+    it('throws NotFoundException when the gift does not exist', async () => {
+      prisma.gift.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update('missing', 'user-1', { status: 'BOUGHT' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.gift.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects updating a gift owned by another user', async () => {
+      prisma.gift.findUnique.mockResolvedValue(gift);
+
+      await expect(
+        service.update(gift.id, 'someone-else', { status: 'BOUGHT' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.gift.update).not.toHaveBeenCalled();
+    });
+
+    it('updates the status when the gift belongs to the requesting user', async () => {
+      prisma.gift.findUnique.mockResolvedValue(gift);
+      prisma.gift.update.mockResolvedValue({ ...gift, status: 'REFUNDED' });
+
+      const result = await service.update(gift.id, contact.userId, {
+        status: 'REFUNDED',
+      });
+
+      expect(prisma.gift.update).toHaveBeenCalledWith({
+        where: { id: gift.id },
+        data: { status: 'REFUNDED' },
+      });
+      expect(result.status).toBe('REFUNDED');
     });
   });
 

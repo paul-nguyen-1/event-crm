@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import * as giftsApi from '@/api/gifts'
-import { giftFormSchema, type GiftFormInput } from '@/schemas/gift'
+import { GIFT_STATUSES, GIFT_STATUS_LABELS, giftFormSchema, type GiftFormInput } from '@/schemas/gift'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -39,6 +46,7 @@ export function GiftDialog({
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<GiftFormInput>({ resolver: zodResolver(giftFormSchema) })
 
@@ -49,6 +57,7 @@ export function GiftDialog({
       giftDate: initial?.giftDate ?? new Date().toISOString().slice(0, 10),
       description: '',
       cost: '',
+      status: 'BOUGHT',
     })
     setServerError(null)
   }, [open, initial, reset])
@@ -63,6 +72,7 @@ export function GiftDialog({
         giftDate: input.giftDate,
         description: input.description,
         costCents: input.cost && !Number.isNaN(dollars) ? Math.round(dollars * 100) : undefined,
+        status: input.status,
       })
       queryClient.invalidateQueries({ queryKey: ['gifts'] })
       onOpenChange(false)
@@ -112,9 +122,32 @@ export function GiftDialog({
               <p className="text-xs text-destructive">{errors.description.message}</p>
             )}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="g-cost">Cost (optional)</Label>
-            <Input id="g-cost" type="number" step="0.01" min="0" placeholder="42" {...register('cost')} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="g-cost">Cost (optional)</Label>
+              <Input id="g-cost" type="number" step="0.01" min="0" placeholder="42" {...register('cost')} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="g-status">Status</Label>
+              <Controller
+                control={control}
+                name="status"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="g-status" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GIFT_STATUSES.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {GIFT_STATUS_LABELS[status]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             Kept so you don&apos;t repeat yourself. Only you can see it.

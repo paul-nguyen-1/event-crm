@@ -80,17 +80,25 @@ model Event {
 }
 
 model Gift {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   contactId   String
-  contact     Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact     Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
   occasion    String
   giftDate    DateTime
   description String
   costCents   Int?
-  createdAt   DateTime @default(now())
+  status      GiftStatus @default(BOUGHT)
+  createdAt   DateTime   @default(now())
 
   @@index([contactId])
   @@map("gifts")
+}
+
+enum GiftStatus {
+  PENDING
+  BOUGHT
+  REFUNDED
+  CANCELLED
 }
 
 enum ReminderChannel {

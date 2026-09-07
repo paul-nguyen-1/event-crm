@@ -11,9 +11,17 @@ import { EventDialog } from '@/components/event-dialog'
 import { GiftDialog } from '@/components/gift-dialog'
 import { SuggestionPanel } from '@/components/suggestion-panel'
 import { EVENT_TYPE_LABELS, type Event } from '@/schemas/event'
+import { GIFT_STATUSES, GIFT_STATUS_LABELS, type GiftStatus } from '@/schemas/gift'
 import { daysUntil, daysUntilLabel } from '@/lib/dates'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -68,6 +76,12 @@ export function ContactDetailPage() {
   const deleteContactMutation = useMutation({
     mutationFn: contactsApi.deleteContact,
     onSuccess: () => navigate('/contacts'),
+  })
+
+  const updateGiftStatusMutation = useMutation({
+    mutationFn: ({ giftId, status }: { giftId: string; status: GiftStatus }) =>
+      giftsApi.updateGiftStatus(giftId, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gifts', id] }),
   })
 
   if (contactLoading) {
@@ -219,6 +233,7 @@ export function ContactDetailPage() {
                     <TableHead>Year</TableHead>
                     <TableHead>Occasion</TableHead>
                     <TableHead>Gift</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Cost</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -230,6 +245,28 @@ export function ContactDetailPage() {
                       </TableCell>
                       <TableCell>{gift.occasion}</TableCell>
                       <TableCell>{gift.description}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={gift.status}
+                          onValueChange={(status) =>
+                            updateGiftStatusMutation.mutate({
+                              giftId: gift.id,
+                              status: status as GiftStatus,
+                            })
+                          }
+                        >
+                          <SelectTrigger size="sm" className="h-7 w-28 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {GIFT_STATUSES.map((status) => (
+                              <SelectItem key={status} value={status}>
+                                {GIFT_STATUS_LABELS[status]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell className="text-right font-mono">
                         {gift.costCents != null ? `$${(gift.costCents / 100).toFixed(0)}` : '—'}
                       </TableCell>

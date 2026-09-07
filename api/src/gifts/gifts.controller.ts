@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -13,6 +14,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthenticatedUser } from '../auth/authenticated-request';
 import { GiftsService } from './gifts.service';
 import { CreateGiftDto } from './dto/create-gift.dto';
+import { UpdateGiftDto } from './dto/update-gift.dto';
 
 @Controller('gifts')
 @UseGuards(JwtAuthGuard)
@@ -30,6 +32,15 @@ export class GiftsController {
     @Query('contactId') contactId?: string,
   ) {
     return this.giftsService.findAllForUser(user.userId, contactId);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateGiftDto,
+  ) {
+    return this.giftsService.update(id, user.userId, dto);
   }
 
   @Delete(':id')

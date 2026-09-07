@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGiftDto } from './dto/create-gift.dto';
+import { UpdateGiftDto } from './dto/update-gift.dto';
 
 @Injectable()
 export class GiftsService {
@@ -32,17 +33,31 @@ export class GiftsService {
         giftDate: new Date(dto.giftDate),
         description: dto.description,
         costCents: dto.costCents,
+        status: dto.status,
       },
     });
   }
 
+  async update(id: string, userId: string, dto: UpdateGiftDto) {
+    await this.findOwned(id, userId);
+    return this.prisma.gift.update({
+      where: { id },
+      data: { status: dto.status },
+    });
+  }
+
   async remove(id: string, userId: string) {
+    await this.findOwned(id, userId);
+    await this.prisma.gift.delete({ where: { id } });
+  }
+
+  private async findOwned(id: string, userId: string) {
     const gift = await this.prisma.gift.findUnique({
       where: { id },
       include: { contact: true },
     });
     if (!gift) throw new NotFoundException('Gift not found');
     if (gift.contact.userId !== userId) throw new ForbiddenException();
-    await this.prisma.gift.delete({ where: { id } });
+    return gift;
   }
 }
