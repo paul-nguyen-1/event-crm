@@ -8,6 +8,7 @@ describe('Outbox atomicity (integration)', () => {
   let outbox: OutboxService;
   let contactsService: ContactsService;
   let userId: string;
+  let createdContactId: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -29,7 +30,14 @@ describe('Outbox atomicity (integration)', () => {
   });
 
   afterAll(async () => {
-    await prisma.domainEvent.deleteMany({});
+    // Scoped to this file's own row, not a blanket deleteMany({}) — the
+    // domain_events table is shared with other e2e spec files that may be
+    // running concurrently in their own worker process against the same
+    // test database, and an unscoped delete here can wipe their in-flight
+    // rows out from under them.
+    await prisma.domainEvent.deleteMany({
+      where: { payload: { path: ['contactId'], equals: createdContactId } },
+    });
     await prisma.contact.deleteMany({ where: { userId } });
     await prisma.user.delete({ where: { id: userId } });
     await prisma.$disconnect();
@@ -39,6 +47,7 @@ describe('Outbox atomicity (integration)', () => {
     const contact = await contactsService.create(userId, {
       name: 'Atomicity Test',
     });
+    createdContactId = contact.id;
 
     const event = await prisma.domainEvent.findFirst({
       where: { type: 'contact.created' },
