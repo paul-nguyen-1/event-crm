@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as authApi from '@/api/auth'
+import { setSessionExpiredHandler } from '@/lib/api'
 import {
   clearTokens,
   decodeAccessToken,
@@ -25,6 +26,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = getAccessToken()
     return token ? decodeAccessToken(token) : null
   })
+
+  useEffect(() => {
+    setSessionExpiredHandler(() => setUser(null))
+  }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -15,6 +15,12 @@ export class ApiError extends Error {
   }
 }
 
+let onSessionExpired: (() => void) | null = null
+
+export function setSessionExpiredHandler(handler: () => void) {
+  onSessionExpired = handler
+}
+
 let refreshPromise: Promise<string | null> | null = null
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -70,6 +76,7 @@ async function request<T>(
     const newToken = await refreshAccessToken()
     if (newToken) return request<T>(path, { method, body, auth }, true)
     clearTokens()
+    onSessionExpired?.()
   }
 
   const text = await res.text()
